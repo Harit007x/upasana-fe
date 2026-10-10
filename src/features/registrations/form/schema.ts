@@ -9,9 +9,14 @@ import {
   type TimeSlot,
 } from "@/config/event"
 
-import { DEFAULT_COUNTRY_CODE, fromE164, mobileError, toE164 } from "@/lib/phone"
+import {
+  DEFAULT_COUNTRY_CODE,
+  fromE164,
+  mobileError,
+  toE164,
+} from "@/lib/phone"
 
-import { compareStay, hasSplitSchedule } from "../stay"
+import { compareStay, hasSplitSchedule, wantsBed } from "../stay"
 import {
   GENDERS,
   RELATION_GENDER,
@@ -38,8 +43,8 @@ import {
  * once instead of one round at a time.
  */
 
-
-const isIn = (list: readonly string[]) => (value: string) => list.includes(value)
+const isIn = (list: readonly string[]) => (value: string) =>
+  list.includes(value)
 const STAY_DATE_VALUES: readonly string[] = STAY_DATES
 const SLOT_VALUES = Object.keys(TIME_SLOTS)
 
@@ -68,13 +73,18 @@ const memberSchema = z.object({
   arrivalSlot: z.string(),
   departureDate: z.string(),
   departureSlot: z.string(),
+  // Asked per person only when the party does not all need a bed. Optional so
+  // a draft saved before it existed still loads.
+  needsAccommodation: z.boolean().optional(),
 })
 
 export const registrationFormSchema = z
   .object({
     type: z.enum(["individual", "family"]),
     groupName: z.string().trim(),
-    mandal: z.string().refine(isIn([...MANDALS, NO_MANDAL]), "Select your mandal"),
+    mandal: z
+      .string()
+      .refine(isIn([...MANDALS, NO_MANDAL]), "Select your mandal"),
     city: z.string().trim().min(2, "Enter the city you are coming from"),
     members: z.array(memberSchema),
     sameSchedule: z.boolean(),
@@ -84,7 +94,9 @@ export const registrationFormSchema = z
     arrivalSlot: z.string(),
     departureDate: z.string(),
     departureSlot: z.string(),
-    travelMode: z.string().refine(isIn(Object.keys(TRAVEL_MODES)), "Select how you are travelling"),
+    travelMode: z
+      .string()
+      .refine(isIn(Object.keys(TRAVEL_MODES)), "Select how you are travelling"),
     vehicleCount: z.string().trim(),
     // One per vehicle, all optional. Longer than the count when the count
     // was lowered: kept so raising it again brings the numbers back, and
@@ -95,7 +107,9 @@ export const registrationFormSchema = z
     needsDrop: z.boolean(),
     accommodationRequired: z.boolean(),
     notes: z.string().trim(),
-    consent: z.boolean().refine((v) => v, "Please confirm the details to submit"),
+    consent: z
+      .boolean()
+      .refine((v) => v, "Please confirm the details to submit"),
     // Set by MobileVerification once the primary contact's code is right: the
     // number that was verified, and the server's proof of it. Not inputs.
     verifiedMobile: z.string(),
@@ -143,7 +157,9 @@ export const registrationFormSchema = z
       }
       issue(
         ["members", index, "fullName"],
-        first === 0 ? "Already added as the primary contact" : `Already added as person ${first + 1}`
+        first === 0
+          ? "Already added as the primary contact"
+          : `Already added as person ${first + 1}`
       )
     })
 
@@ -151,8 +167,15 @@ export const registrationFormSchema = z
     // On the relation field; changing either field re-checks it.
     if (values.type === "family") {
       values.members.forEach((member, index) => {
-        const expected = RELATION_GENDER[member.relation as keyof typeof RELATION_GENDER]
-        if (index === 0 || !expected || !member.gender || member.gender === expected) return
+        const expected =
+          RELATION_GENDER[member.relation as keyof typeof RELATION_GENDER]
+        if (
+          index === 0 ||
+          !expected ||
+          !member.gender ||
+          member.gender === expected
+        )
+          return
         issue(
           ["members", index, "relation"],
           `${member.relation} has to be ${GENDERS[expected]} — check the gender or the relation`
@@ -163,7 +186,10 @@ export const registrationFormSchema = z
     values.members.forEach((member, index) => {
       if (member.mobile === "") {
         if (index === 0) {
-          issue(["members", 0, "mobile"], "The primary contact needs a mobile number")
+          issue(
+            ["members", 0, "mobile"],
+            "The primary contact needs a mobile number"
+          )
         }
         return
       }
@@ -176,30 +202,57 @@ export const registrationFormSchema = z
       // sanchalak or admin in person, or already on the registration being
       // edited. A number changed after verifying needs it again.
       // One registration per contact number.
-      if (index === 0 && values.takenMobile && contactMobile(values) === values.takenMobile) {
-        issue(["members", 0, "mobile"], `Already registered as ${values.takenCode} — one registration per number`)
+      if (
+        index === 0 &&
+        values.takenMobile &&
+        contactMobile(values) === values.takenMobile
+      ) {
+        issue(
+          ["members", 0, "mobile"],
+          `Already registered as ${values.takenCode} — one registration per number`
+        )
         return
       }
       if (index === 0 && !isContactVerified(values)) {
-        issue(["members", 0, "mobile"], "Verify this number with the code we send on WhatsApp")
+        issue(
+          ["members", 0, "mobile"],
+          "Verify this number with the code we send on WhatsApp"
+        )
       }
     })
 
     // A family is looked after by an adult. Someone registering alone may be
     // younger, so this is for families only.
     const contactAge = Number(values.members[0]?.age)
-    if (values.type === "family" && contactAge >= 1 && contactAge < MIN_FAMILY_CONTACT_AGE) {
-      issue(["members", 0, "age"], `A family's primary contact has to be ${MIN_FAMILY_CONTACT_AGE} or older`)
+    if (
+      values.type === "family" &&
+      contactAge >= 1 &&
+      contactAge < MIN_FAMILY_CONTACT_AGE
+    ) {
+      issue(
+        ["members", 0, "age"],
+        `A family's primary contact has to be ${MIN_FAMILY_CONTACT_AGE} or older`
+      )
     }
 
     if (!hasSplitDates(values)) {
-      if (!isIn(STAY_DATE_VALUES)(values.arrivalDate)) issue(["arrivalDate"], "Select the arrival day")
-      if (!isIn(SLOT_VALUES)(values.arrivalSlot)) issue(["arrivalSlot"], "Select a time")
-      if (!isIn(STAY_DATE_VALUES)(values.departureDate)) issue(["departureDate"], "Select the departure day")
-      if (!isIn(SLOT_VALUES)(values.departureSlot)) issue(["departureSlot"], "Select a time")
+      if (!isIn(STAY_DATE_VALUES)(values.arrivalDate))
+        issue(["arrivalDate"], "Select the arrival day")
+      if (!isIn(SLOT_VALUES)(values.arrivalSlot))
+        issue(["arrivalSlot"], "Select a time")
+      if (!isIn(STAY_DATE_VALUES)(values.departureDate))
+        issue(["departureDate"], "Select the departure day")
+      if (!isIn(SLOT_VALUES)(values.departureSlot))
+        issue(["departureSlot"], "Select a time")
 
-      const arrival = { date: values.arrivalDate, slot: values.arrivalSlot } as StayPoint
-      const departure = { date: values.departureDate, slot: values.departureSlot } as StayPoint
+      const arrival = {
+        date: values.arrivalDate,
+        slot: values.arrivalSlot,
+      } as StayPoint
+      const departure = {
+        date: values.departureDate,
+        slot: values.departureSlot,
+      } as StayPoint
       const datesPicked =
         isIn(STAY_DATE_VALUES)(values.arrivalDate) &&
         isIn(STAY_DATE_VALUES)(values.departureDate) &&
@@ -213,14 +266,23 @@ export const registrationFormSchema = z
         const path = ["members", index]
         // Both checked, not one then the other, so every gap shows at once.
         const arrivalPicked =
-          isIn(STAY_DATE_VALUES)(member.arrivalDate) && isIn(SLOT_VALUES)(member.arrivalSlot)
+          isIn(STAY_DATE_VALUES)(member.arrivalDate) &&
+          isIn(SLOT_VALUES)(member.arrivalSlot)
         const departurePicked =
-          isIn(STAY_DATE_VALUES)(member.departureDate) && isIn(SLOT_VALUES)(member.departureSlot)
+          isIn(STAY_DATE_VALUES)(member.departureDate) &&
+          isIn(SLOT_VALUES)(member.departureSlot)
         if (!arrivalPicked) issue([...path, "arrivalDate"], "Select arrival")
-        if (!departurePicked) issue([...path, "departureDate"], "Select departure")
+        if (!departurePicked)
+          issue([...path, "departureDate"], "Select departure")
         if (!arrivalPicked || !departurePicked) return
-        const memberArrival = { date: member.arrivalDate, slot: member.arrivalSlot } as StayPoint
-        const memberDeparture = { date: member.departureDate, slot: member.departureSlot } as StayPoint
+        const memberArrival = {
+          date: member.arrivalDate,
+          slot: member.arrivalSlot,
+        } as StayPoint
+        const memberDeparture = {
+          date: member.departureDate,
+          slot: member.departureSlot,
+        } as StayPoint
         if (compareStay(memberDeparture, memberArrival) <= 0) {
           issue([...path, "departureDate"], "Departure has to be after arrival")
         }
@@ -239,23 +301,31 @@ export const registrationFormSchema = z
       ) {
         issue(
           ["vehicleCount"],
-          max < MAX_VEHICLES.family ? `Enter 1 to ${max} — no more vehicles than people` : `Enter 1 to ${max}`
+          max < MAX_VEHICLES.family
+            ? `Enter 1 to ${max} — no more vehicles than people`
+            : `Enter 1 to ${max}`
         )
       }
       // Optional, but a number that is there has to be a real plate, and each
       // vehicle only once.
       const firstWithPlate = new Map<string, number>()
-      values.vehicleNumbers.slice(0, vehicleSlots(values)).forEach((number, index) => {
-        const value = (number ?? "").trim()
-        if (value === "") return
-        if (!isVehiclePlate(value)) {
-          issue(["vehicleNumbers", index], "Enter a number like GJ-05-AB-1234")
-          return
-        }
-        const first = firstWithPlate.get(normalizePlate(value))
-        if (first !== undefined) issue(["vehicleNumbers", index], `Same as vehicle ${first + 1}`)
-        else firstWithPlate.set(normalizePlate(value), index)
-      })
+      values.vehicleNumbers
+        .slice(0, vehicleSlots(values))
+        .forEach((number, index) => {
+          const value = (number ?? "").trim()
+          if (value === "") return
+          if (!isVehiclePlate(value)) {
+            issue(
+              ["vehicleNumbers", index],
+              "Enter a number like GJ-05-AB-1234"
+            )
+            return
+          }
+          const first = firstWithPlate.get(normalizePlate(value))
+          if (first !== undefined)
+            issue(["vehicleNumbers", index], `Same as vehicle ${first + 1}`)
+          else firstWithPlate.set(normalizePlate(value), index)
+        })
     }
   })
 
@@ -270,10 +340,15 @@ export const MAX_VEHICLES = { individual: 1, family: 4 } as const
 /** A family's primary contact has to be at least this old. Mirrors the server. */
 export const MIN_FAMILY_CONTACT_AGE = 18
 
-type VehicleValues = Pick<RegistrationFormValues, "type" | "vehicleCount" | "members">
+type VehicleValues = Pick<
+  RegistrationFormValues,
+  "type" | "vehicleCount" | "members"
+>
 
 /** No more vehicles than people: one for an individual, up to four for a family. */
-export function maxVehicles(values: Pick<RegistrationFormValues, "type" | "members">) {
+export function maxVehicles(
+  values: Pick<RegistrationFormValues, "type" | "members">
+) {
   return Math.max(1, Math.min(MAX_VEHICLES[values.type], values.members.length))
 }
 
@@ -288,7 +363,8 @@ export function vehicleSlots(values: VehicleValues) {
 }
 
 /** "gj 05-ab 1234" → "GJ05AB1234": how two plates are compared. */
-export const normalizePlate = (plate: string) => plate.toUpperCase().replace(/[\s.-]/g, "")
+export const normalizePlate = (plate: string) =>
+  plate.toUpperCase().replace(/[\s.-]/g, "")
 
 /**
  * An Indian number plate: state, district, up to three series letters, four
@@ -302,7 +378,8 @@ export const isVehiclePlate = (plate: string) =>
 /** The contact's number as entered, in E.164, or undefined while it is not a valid number. */
 export function contactMobile(values: Pick<RegistrationFormValues, "members">) {
   const contact = values.members[0]
-  if (!contact?.mobile || mobileError(contact.mobile, contact.mobileCountry)) return undefined
+  if (!contact?.mobile || mobileError(contact.mobile, contact.mobileCountry))
+    return undefined
   return toE164(contact.mobileCountry, contact.mobile)
 }
 
@@ -314,7 +391,11 @@ export function contactMobile(values: Pick<RegistrationFormValues, "members">) {
 export function isContactVerified(
   values: Pick<
     RegistrationFormValues,
-    "members" | "keptMobile" | "verifiedInPerson" | "verifiedMobile" | "mobileVerificationToken"
+    | "members"
+    | "keptMobile"
+    | "verifiedInPerson"
+    | "verifiedMobile"
+    | "mobileVerificationToken"
   >
 ) {
   const mobile = contactMobile(values)
@@ -325,7 +406,9 @@ export function isContactVerified(
 }
 
 /** Smallest believable age gaps, for the "check the age" hints. */
-const RELATION_AGE_GAP: Partial<Record<string, { older: boolean; years: number }>> = {
+const RELATION_AGE_GAP: Partial<
+  Record<string, { older: boolean; years: number }>
+> = {
   Son: { older: false, years: 14 },
   Daughter: { older: false, years: 14 },
   Father: { older: true, years: 14 },
@@ -340,7 +423,9 @@ const RELATION_AGE_GAP: Partial<Record<string, { older: boolean; years: number }
  * contact, a "Father" younger. Usually a typo, so they never block Continue.
  * By person index; only for people whose relation and both ages are filled.
  */
-export function relationAgeHints(values: Pick<RegistrationFormValues, "type" | "members">) {
+export function relationAgeHints(
+  values: Pick<RegistrationFormValues, "type" | "members">
+) {
   const hints = new Map<number, string>()
   if (values.type !== "family") return hints
   const contact = values.members[0]
@@ -350,7 +435,9 @@ export function relationAgeHints(values: Pick<RegistrationFormValues, "type" | "
     const gap = RELATION_AGE_GAP[member.relation]
     const age = Number(member.age)
     if (index === 0 || !gap || !age) return
-    const fits = gap.older ? age >= contactAge + gap.years : age <= contactAge - gap.years
+    const fits = gap.older
+      ? age >= contactAge + gap.years
+      : age <= contactAge - gap.years
     if (fits) return
     const who = contact.fullName.trim().split(/\s+/)[0] || "the primary contact"
     hints.set(
@@ -363,14 +450,22 @@ export function relationAgeHints(values: Pick<RegistrationFormValues, "type" | "
   return hints
 }
 
-const PARTY_DATES = ["arrivalDate", "arrivalSlot", "departureDate", "departureSlot"]
+const PARTY_DATES = [
+  "arrivalDate",
+  "arrivalSlot",
+  "departureDate",
+  "departureSlot",
+]
 
 /**
  * Which fields' rules read the field that just changed — passed to
  * `keepErrorsFresh`, so a conflict between two fields shows whichever one was
  * edited last. Keep in step with the cross-field rules in the schema above.
  */
-export function relatedFields(changed: string, values: RegistrationFormValues): string[] {
+export function relatedFields(
+  changed: string,
+  values: RegistrationFormValues
+): string[] {
   if (PARTY_DATES.includes(changed)) return PARTY_DATES
   // Adding or removing someone changes how many vehicles are allowed.
   if (changed === "members" || changed === "type") return ["vehicleCount"]
@@ -411,7 +506,9 @@ export function relatedFields(changed: string, values: RegistrationFormValues): 
  * left over after unticking it and removing the others is back on the party's
  * dates.
  */
-export function hasSplitDates(values: Pick<RegistrationFormValues, "members" | "sameSchedule">) {
+export function hasSplitDates(
+  values: Pick<RegistrationFormValues, "members" | "sameSchedule">
+) {
   return values.members.length > 1 && !values.sameSchedule
 }
 export type MemberFormValues = RegistrationFormValues["members"][number]
@@ -430,15 +527,50 @@ export function isSameDayVisit(values: DatesValues) {
     ? values.members
     : [{ arrivalDate: values.arrivalDate, departureDate: values.departureDate }]
   return people.every(
-    (p) => !!p.arrivalDate && !!p.departureDate && p.departureDate <= p.arrivalDate
+    (p) =>
+      !!p.arrivalDate && !!p.departureDate && p.departureDate <= p.arrivalDate
   )
 }
 
-/** Accommodation as it is saved: never for a same-day visit. */
-export function needsAccommodation(
-  values: DatesValues & Pick<RegistrationFormValues, "accommodationRequired">
-) {
-  return values.accommodationRequired && !isSameDayVisit(values)
+/**
+ * This person leaves the day they arrive, so there is no night to give them
+ * a bed for. False until both their days are picked.
+ */
+export function isSameDayFor(values: DatesValues, index: number) {
+  const p = hasSplitDates(values) ? values.members[index] : values
+  return (
+    !!p?.arrivalDate && !!p.departureDate && p.departureDate <= p.arrivalDate
+  )
+}
+
+type AccommodationValues = DatesValues &
+  Pick<RegistrationFormValues, "accommodationRequired">
+
+/**
+ * Whether the form asks for "everyone" at once. `accommodationRequired` is
+ * that box; with one person it is simply their answer.
+ */
+export const accommodationPerPerson = (values: AccommodationValues) =>
+  values.members.length > 1 && !values.accommodationRequired
+
+/**
+ * For each person, whether they get a bed as the form stands: everyone when
+ * the box for everyone is ticked, otherwise each person's own tick. Never
+ * someone with no night here.
+ */
+export function bedsWanted(values: AccommodationValues) {
+  const perPerson = accommodationPerPerson(values)
+  return values.members.map(
+    (member, index) =>
+      (perPerson
+        ? !!member.needsAccommodation
+        : values.accommodationRequired) && !isSameDayFor(values, index)
+  )
+}
+
+/** Accommodation as it is saved: anyone in the party has a bed coming. */
+export function needsAccommodation(values: AccommodationValues) {
+  return bedsWanted(values).some(Boolean)
 }
 
 /** The fields each step owns, so Continue validates only what is on screen. */
@@ -472,6 +604,7 @@ export function emptyMember(): MemberFormValues {
     arrivalSlot: "",
     departureDate: "",
     departureSlot: "",
+    needsAccommodation: false,
   }
 }
 
@@ -523,15 +656,20 @@ export function toNewRegistration(
   const split = hasSplitDates(values)
   const type: RegistrationType = values.type
 
+  const beds = bedsWanted(values)
   const members = values.members.map((member, index) => ({
+    needsAccommodation: beds[index],
     // Empty for someone new: the server assigns their id.
     id: member.key ?? "",
     fullName: member.fullName.trim(),
     gender: member.gender as Gender,
     age: Number(member.age),
-    mobile: member.mobile ? toE164(member.mobileCountry, member.mobile) : undefined,
+    mobile: member.mobile
+      ? toE164(member.mobileCountry, member.mobile)
+      : undefined,
     // Optional: left unpicked, it is simply not sent.
-    relation: index > 0 && type === "family" ? orUndefined(member.relation) : undefined,
+    relation:
+      index > 0 && type === "family" ? orUndefined(member.relation) : undefined,
     isPrimary: index === 0,
     needsAssistance: member.needsAssistance,
     assistanceNote: member.needsAssistance
@@ -539,10 +677,16 @@ export function toNewRegistration(
       : undefined,
     arrival: !split
       ? arrival
-      : { date: member.arrivalDate as StayDate, slot: member.arrivalSlot as TimeSlot },
+      : {
+          date: member.arrivalDate as StayDate,
+          slot: member.arrivalSlot as TimeSlot,
+        },
     departure: !split
       ? departure
-      : { date: member.departureDate as StayDate, slot: member.departureSlot as TimeSlot },
+      : {
+          date: member.departureDate as StayDate,
+          slot: member.departureSlot as TimeSlot,
+        },
   }))
 
   // With split dates, the booking spans from the first person in to the last
@@ -552,7 +696,10 @@ export function toNewRegistration(
     : members.map((m) => m.arrival).sort(compareStay)[0]
   const bookingDeparture = !split
     ? departure
-    : members.map((m) => m.departure).sort(compareStay).at(-1)!
+    : members
+        .map((m) => m.departure)
+        .sort(compareStay)
+        .at(-1)!
 
   return {
     type,
@@ -564,7 +711,8 @@ export function toNewRegistration(
     departure: bookingDeparture,
     travel: {
       mode,
-      vehicleCount: mode === "personal_vehicle" ? vehicleSlots(values) : undefined,
+      vehicleCount:
+        mode === "personal_vehicle" ? vehicleSlots(values) : undefined,
       // Only the boxes on screen, without the blank ones.
       vehicleNumbers:
         mode === "personal_vehicle"
@@ -573,11 +721,15 @@ export function toNewRegistration(
               .map((number) => (number ?? "").trim().toUpperCase())
               .filter(Boolean)
           : undefined,
-      reference: mode === "personal_vehicle" ? undefined : orUndefined(values.travelReference),
-      needsPickup: (mode === "train" || mode === "flight") && values.needsPickup,
+      reference:
+        mode === "personal_vehicle"
+          ? undefined
+          : orUndefined(values.travelReference),
+      needsPickup:
+        (mode === "train" || mode === "flight") && values.needsPickup,
       needsDrop: (mode === "train" || mode === "flight") && values.needsDrop,
     },
-    accommodationRequired: needsAccommodation(values),
+    accommodationRequired: beds.some(Boolean),
     notes: orUndefined(values.notes),
     source,
     // How the contact's number is vouched for. Nothing when an edit keeps it.
@@ -596,7 +748,9 @@ function contactProof(values: RegistrationFormValues) {
  * A saved registration as form values, for editing it. The contact's number
  * goes into `keptMobile`, so leaving it alone needs no new verification.
  */
-export function fromRegistration(registration: Registration): RegistrationFormValues {
+export function fromRegistration(
+  registration: Registration
+): RegistrationFormValues {
   const split = hasSplitSchedule(registration)
   const members = registration.members.map((member) => {
     const phone = member.mobile ? fromE164(member.mobile) : undefined
@@ -615,8 +769,15 @@ export function fromRegistration(registration: Registration): RegistrationFormVa
       arrivalSlot: split ? member.arrival.slot : "",
       departureDate: split ? member.departure.date : "",
       departureSlot: split ? member.departure.slot : "",
+      needsAccommodation: wantsBed(registration, member),
     }
   })
+  // "Everyone" stays ticked only when everyone who stays a night has a bed; a
+  // party where only some do opens on the per-person ticks.
+  const everyone = registration.members.every(
+    (m, i) =>
+      members[i].needsAccommodation || m.departure.date <= m.arrival.date
+  )
   const count = registration.travel.vehicleCount ?? 1
   const numbers = registration.travel.vehicleNumbers ?? []
   return {
@@ -633,14 +794,14 @@ export function fromRegistration(registration: Registration): RegistrationFormVa
     departureSlot: registration.departure.slot,
     travelMode: registration.travel.mode,
     vehicleCount: String(count),
-    vehicleNumbers: [...numbers, ...Array<string>(Math.max(1, count) - numbers.length).fill("")].slice(
-      0,
-      Math.max(1, count, numbers.length)
-    ),
+    vehicleNumbers: [
+      ...numbers,
+      ...Array<string>(Math.max(1, count) - numbers.length).fill(""),
+    ].slice(0, Math.max(1, count, numbers.length)),
     travelReference: registration.travel.reference ?? "",
     needsPickup: registration.travel.needsPickup,
     needsDrop: registration.travel.needsDrop ?? false,
-    accommodationRequired: registration.accommodationRequired,
+    accommodationRequired: registration.accommodationRequired && everyone,
     notes: registration.notes ?? "",
     keptMobile: registration.members[0]?.mobile ?? "",
   }

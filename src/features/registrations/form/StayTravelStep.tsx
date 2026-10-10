@@ -1,6 +1,14 @@
 import * as React from "react"
+import {
+  RiCheckboxCircleFill,
+  RiEraserLine,
+  RiFileCopyLine,
+  RiHotelBedLine,
+} from "@remixicon/react"
+import { cn } from "cn"
 import { Controller, useFormContext } from "react-hook-form"
 
+import { Button } from "@/components/ui/button"
 import { Checkbox, ChoiceGroup } from "@/components/ui/choice"
 import { DigitsInput, Field, Input } from "@/components/ui/input"
 import { NativeSelect } from "@/components/ui/select"
@@ -18,6 +26,7 @@ import { compareStay, isPresentOn, nightsBetween } from "../stay"
 import { TRAVEL_MODES, type TravelMode } from "../types"
 import {
   hasSplitDates,
+  isSameDayFor,
   isSameDayVisit,
   maxVehicles,
   vehicleSlots,
@@ -190,6 +199,26 @@ export function StayTravelStep() {
     }
   }, [sameDay, getValues, setValue])
 
+  const forEveryone = watch("accommodationRequired")
+  const party = members.length > 1
+  const dates = { members, sameSchedule, arrivalDate, departureDate }
+
+  /**
+   * Unticking "for everyone" starts everyone who stays a night ticked, so
+   * only the people who do not need a bed have to be unticked — unless some
+   * were already picked, which is kept.
+   */
+  const onEveryoneChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    if (event.target.checked) return
+    const current = getValues("members")
+    if (current.some((m) => m.needsAccommodation)) return
+    current.forEach((_, index) => {
+      if (!isSameDayFor(getValues(), index)) {
+        setValue(`members.${index}.needsAccommodation`, true)
+      }
+    })
+  }
+
   /**
    * Splitting starts every person on the party's dates, so only the
    * exceptions need editing. Going back to one set of dates starts it from the
@@ -214,6 +243,34 @@ export function StayTravelStep() {
       setValue(`members.${index}.departureSlot`, getValues("departureSlot"))
     })
   }
+
+  const STAY_FIELDS = [
+    "arrivalDate",
+    "arrivalSlot",
+    "departureDate",
+    "departureSlot",
+  ] as const
+
+  /**
+   * "Same as above" copies the previous person's arrival and departure onto
+   * this one, so only the people whose dates differ need editing by hand;
+   * "Clear" empties them again. Both go through setValue, which keepErrorsFresh
+   * hears like any other change, so an error already shown on these fields
+   * clears as soon as the copy fixes it.
+   */
+  const copyFromAbove = (index: number) => {
+    const above = getValues(`members.${index - 1}`)
+    for (const field of STAY_FIELDS) {
+      setValue(`members.${index}.${field}`, above[field], { shouldDirty: true })
+    }
+  }
+  const clearStay = (index: number) => {
+    for (const field of STAY_FIELDS) {
+      setValue(`members.${index}.${field}`, "", { shouldDirty: true })
+    }
+  }
+  const hasStay = (member: (typeof members)[number] | undefined) =>
+    !!member && STAY_FIELDS.some((field) => member[field])
 
   return (
     <div className="flex flex-col gap-6">
@@ -265,14 +322,42 @@ export function StayTravelStep() {
           <div className="flex flex-col gap-3 rounded-lg border border-border p-4">
             {members.map((member, index) => {
               const memberErrors = errors.members?.[index]
+              const above = index > 0 ? members[index - 1] : undefined
+              const filled = hasStay(member)
+              const aboveHasDates = hasStay(above)
               return (
                 <div
                   key={index}
-                  className="flex flex-col gap-2 border-b border-border pb-3 last:border-b-0 last:pb-0"
+                  className="group/person flex flex-col gap-2 border-b border-border pb-3 last:border-b-0 last:pb-0"
                 >
-                  <p className="text-xs/relaxed font-medium">
-                    {member.fullName || `Person ${index + 1}`}
-                  </p>
+                  <div className="flex min-h-6 items-center justify-between gap-2">
+                    <p className="text-xs/relaxed font-medium">
+                      {member.fullName || `Person ${index + 1}`}
+                    </p>
+                    {/* Shows on hover with a mouse; always on touch screens,
+                        which have no hover. "Clear" once this person has any
+                        dates; otherwise "Same as above", once the person above
+                        has some to copy. */}
+                    {index > 0 && (filled || aboveHasDates) && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() =>
+                          filled ? clearStay(index) : copyFromAbove(index)
+                        }
+                        title={
+                          filled
+                            ? `Clear ${member.fullName || `person ${index + 1}`}'s arriving and leaving`
+                            : `Copy ${above?.fullName || `person ${index}`}'s arriving and leaving`
+                        }
+                        className="text-muted-foreground opacity-0 transition-opacity group-hover/person:opacity-100 focus-visible:opacity-100 pointer-coarse:opacity-100"
+                      >
+                        {filled ? <RiEraserLine /> : <RiFileCopyLine />}
+                        {filled ? "Clear" : "Same as above"}
+                      </Button>
+                    )}
+                  </div>
                   <div className="grid gap-3 sm:grid-cols-2">
                     <StayPicker
                       prefix={`members.${index}.arrival`}
@@ -447,15 +532,96 @@ export function StayTravelStep() {
         <h3 className="font-heading text-sm font-medium">Stay</h3>
         <Checkbox
           id="accommodationRequired"
-          label={`${weNeed} accommodation from Mandir`}
+          label={
+            party
+              ? `${weNeed} accommodation for everyone`
+              : `${weNeed} accommodation from Mandir`
+          }
           description={
             sameDay
               ? "Not needed — you arrive and leave on the same day, so there is no night's stay."
-              : "The accommodation team allots rooms or dormitory beds after registration closes."
+              : party
+                ? "Untick if only some of you need it. The accommodation team allots rooms or dormitory beds after registration closes."
+                : "The accommodation team allots rooms or dormitory beds after registration closes."
           }
           disabled={sameDay}
-          {...register("accommodationRequired")}
+          {...register("accommodationRequired", {
+            onChange: onEveryoneChange,
+          })}
         />
+
+        {/* The party, below the box: ticks to pick who while "for everyone"
+            is unticked (nobody ticked: nobody needs a bed); once it is
+            ticked, a read-only pill per person showing who has a bed coming. */}
+        {party && !sameDay && (
+          <div className="flex flex-col gap-3 rounded-lg border border-border p-4">
+            <div className="flex flex-col gap-0.5">
+              <p className="text-xs/relaxed font-medium">
+                {forEveryone ? "Accommodation for" : "Who needs accommodation?"}
+              </p>
+              {!forEveryone && (
+                <p className="text-2xs/relaxed text-muted-foreground">
+                  Leave everyone unticked if nobody does.
+                </p>
+              )}
+            </div>
+            {forEveryone ? (
+              <ul className="flex flex-wrap gap-2">
+                {members.map((member, index) => {
+                  const noNight = isSameDayFor(dates, index)
+                  return (
+                    <li
+                      key={index}
+                      className={cn(
+                        "inline-flex items-center gap-1 rounded-sm border py-0.5 pr-1 pl-1.5 text-2xs",
+                        noNight
+                          ? "border-border text-muted-foreground"
+                          : "border-primary/30 bg-primary/5"
+                      )}
+                    >
+                      <RiHotelBedLine
+                        aria-hidden
+                        className={cn(
+                          "size-3.5 shrink-0",
+                          noNight ? "text-muted-foreground" : "text-primary"
+                        )}
+                      />
+                      {member.fullName || `Person ${index + 1}`}
+                      {noNight ? (
+                        <span className="pr-0.5">
+                          · same day, no night
+                        </span>
+                      ) : (
+                        <RiCheckboxCircleFill
+                          aria-label="has a bed coming"
+                          className="size-3.5 shrink-0 text-primary"
+                        />
+                      )}
+                    </li>
+                  )
+                })}
+              </ul>
+            ) : (
+              members.map((member, index) => {
+                const noNight = isSameDayFor(dates, index)
+                return (
+                  <Checkbox
+                    key={index}
+                    id={`members.${index}.needsAccommodation`}
+                    label={member.fullName || `Person ${index + 1}`}
+                    description={
+                      noNight
+                        ? "Arrives and leaves the same day — no night's stay"
+                        : undefined
+                    }
+                    disabled={noNight}
+                    {...register(`members.${index}.needsAccommodation`)}
+                  />
+                )
+              })
+            )}
+          </div>
+        )}
       </section>
     </div>
   )

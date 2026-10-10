@@ -29,13 +29,34 @@ type NavItem = {
 
 const NAV: NavItem[] = [
   { to: "/", label: "Overview", short: "Overview", icon: RiDashboardLine },
-  { to: "/registrations", label: "Registrations", short: "Registrations", icon: RiFileList3Line },
-  { to: "/registrations/new", label: "New registration", short: "Register", icon: RiUserAddLine },
-  { to: "/accommodation", label: "Accommodation", short: "Stay", icon: RiHotelBedLine, nested: true },
+  {
+    to: "/registrations",
+    label: "Registrations",
+    short: "Registrations",
+    icon: RiFileList3Line,
+  },
+  {
+    to: "/registrations/new",
+    label: "New registration",
+    short: "Register",
+    icon: RiUserAddLine,
+  },
+  {
+    to: "/accommodation",
+    label: "Accommodation",
+    short: "Stay",
+    icon: RiHotelBedLine,
+    nested: true,
+  },
 ]
 
 const ADMIN_NAV: NavItem[] = [
-  { to: "/admin/schedule", label: "Schedule", short: "Schedule", icon: RiCalendarScheduleLine },
+  {
+    to: "/admin/schedule",
+    label: "Schedule",
+    short: "Schedule",
+    icon: RiCalendarScheduleLine,
+  },
   { to: "/admin", label: "Team", short: "Team", icon: RiShieldUserLine },
 ]
 
@@ -82,7 +103,9 @@ function SignedInAs() {
     <span className="hidden max-w-48 items-center gap-1.5 text-2xs text-muted-foreground md:flex">
       <span className="truncate">{session.user.name}</span>
       {(session.user.role === "admin" || session.user.role === "sanchalak") && (
-        <Badge variant="outline">{roleLabel(session.user.role, session.user.mandal)}</Badge>
+        <Badge variant="outline">
+          {roleLabel(session.user.role, session.user.mandal)}
+        </Badge>
       )}
     </span>
   )
@@ -100,9 +123,33 @@ export function AppShell() {
   const { data: session } = useSession()
   const nav = isAdmin(session?.user.role) ? [...NAV, ...ADMIN_NAV] : NAV
 
+  // The header's height as --app-header-h, for anything that sticks just
+  // below it (BackLink). Measured, since it is taller from `sm` up where the
+  // tabs move into it, and taller again under a notch.
+  const shellRef = React.useRef<HTMLDivElement>(null)
+  const headerRef = React.useRef<HTMLElement>(null)
+  React.useEffect(() => {
+    const header = headerRef.current
+    if (!header) return
+    const observer = new ResizeObserver(() =>
+      shellRef.current?.style.setProperty(
+        "--app-header-h",
+        `${header.getBoundingClientRect().height}px`
+      )
+    )
+    observer.observe(header)
+    return () => observer.disconnect()
+  }, [])
+
   return (
-    <div className="flex min-h-svh flex-col [--bottom-nav-h:calc(3.5rem+env(safe-area-inset-bottom,0px))] [--bottom-safe:0px] sm:[--bottom-nav-h:0px]">
-      <header className="sticky top-0 z-30 border-b border-border print:hidden bg-background/90 pt-[env(safe-area-inset-top,0px)] backdrop-blur">
+    <div
+      ref={shellRef}
+      className="flex min-h-svh flex-col [--bottom-nav-h:calc(3.5rem+env(safe-area-inset-bottom,0px))] [--bottom-safe:0px] sm:[--bottom-nav-h:0px]"
+    >
+      <header
+        ref={headerRef}
+        className="sticky top-0 z-30 border-b border-border bg-background/90 pt-[env(safe-area-inset-top,0px)] backdrop-blur print:hidden"
+      >
         <div className="mx-auto flex w-full max-w-6xl items-center justify-between gap-3 px-4 py-3 sm:px-6">
           <div className="flex min-w-0 items-center gap-3">
             <span
@@ -163,7 +210,7 @@ export function AppShell() {
 
       <nav
         aria-label="Main"
-        className="fixed inset-x-0 bottom-0 z-30 grid auto-cols-fr grid-flow-col border-t print:hidden border-border bg-background/95 pb-[env(safe-area-inset-bottom,0px)] backdrop-blur sm:hidden"
+        className="fixed inset-x-0 bottom-0 z-30 grid auto-cols-fr grid-flow-col border-t border-border bg-background/95 pb-[env(safe-area-inset-bottom,0px)] backdrop-blur sm:hidden print:hidden"
       >
         {nav.map(({ to, short, icon: Icon, nested }) => (
           <NavLink
@@ -199,12 +246,16 @@ export function PageHeader({
   return (
     <div className="flex flex-wrap items-end justify-between gap-3">
       <div className="flex min-w-0 flex-col gap-1">
-        <h1 className="font-heading text-lg font-medium text-balance">{title}</h1>
+        <h1 className="font-heading text-lg font-medium text-balance">
+          {title}
+        </h1>
         {description && (
           <p className="text-xs/relaxed text-muted-foreground">{description}</p>
         )}
       </div>
-      {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
+      {actions && (
+        <div className="flex flex-wrap items-center gap-2">{actions}</div>
+      )}
     </div>
   )
 }

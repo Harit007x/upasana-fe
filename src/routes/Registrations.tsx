@@ -23,6 +23,7 @@ import {
 } from "@/features/registrations/components"
 import { displayName } from "@/features/registrations/format"
 import { SampleDataToggle } from "@/features/registrations/SampleDataToggle"
+import { wantsBed } from "@/features/registrations/stay"
 import { isAdmin, useSession } from "@/lib/auth-client"
 import { formatMobile } from "@/lib/phone"
 import {
@@ -100,7 +101,7 @@ function downloadCsv(registrations: Registration[]) {
       (r.travel.vehicleNumbers ?? []).join("; "),
       r.travel.needsPickup ? "Yes" : "",
       r.travel.needsDrop ? "Yes" : "",
-      r.accommodationRequired ? "Yes" : "No",
+      wantsBed(r, m) ? "Yes" : "No",
       m.needsAssistance ? (m.assistanceNote ?? "Yes") : "",
       r.mobileVerification === "otp"
         ? "OTP"

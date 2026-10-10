@@ -11,7 +11,10 @@ export function compareStay(a: StayPoint, b: StayPoint) {
 }
 
 /** Whether the member is at the venue at any point on the given day. */
-export function isPresentOn(member: Pick<Member, "arrival" | "departure">, day: string) {
+export function isPresentOn(
+  member: Pick<Member, "arrival" | "departure">,
+  day: string
+) {
   return member.arrival.date <= day && member.departure.date >= day
 }
 
@@ -37,4 +40,29 @@ export function hasSplitSchedule(registration: Registration) {
       compareStay(member.arrival, registration.arrival) !== 0 ||
       compareStay(member.departure, registration.departure) !== 0
   )
+}
+
+/**
+ * Whether this person asked for a bed. `accommodationRequired` on the
+ * registration means "anyone in the party"; each person's own answer is on
+ * them (the server fills it in for registrations from before it existed).
+ */
+export function wantsBed(
+  registration: Pick<Registration, "accommodationRequired">,
+  member: Pick<Member, "needsAccommodation">
+) {
+  return (
+    registration.accommodationRequired && member.needsAccommodation !== false
+  )
+}
+
+/** "Yes", "No", or "2 of 4" when only some of the party asked for a bed. */
+export function accommodationSummary(registration: Registration) {
+  const wanting = registration.members.filter((m) =>
+    wantsBed(registration, m)
+  ).length
+  if (wanting === 0) return "No"
+  return wanting === registration.members.length
+    ? "Yes"
+    : `${wanting} of ${registration.members.length}`
 }

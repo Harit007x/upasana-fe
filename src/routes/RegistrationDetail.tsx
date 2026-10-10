@@ -1,8 +1,9 @@
-import { RiArrowLeftLine, RiEditLine, RiWheelchairLine } from "@remixicon/react"
+import { RiEditLine, RiWheelchairLine } from "@remixicon/react"
 import * as React from "react"
 import { Link, useParams } from "react-router"
 
 import { PageHeader } from "@/components/layout/AppShell"
+import { BackLink } from "@/components/layout/BackLink"
 import { LoadError } from "@/components/LoadError"
 import { Button, buttonVariants } from "@/components/ui/button"
 import {
@@ -39,10 +40,12 @@ import {
   formatStay,
 } from "@/features/registrations/format"
 import {
+  accommodationSummary,
   compareStay,
   eventDaysCovered,
   hasSplitSchedule,
   nightsBetween,
+  wantsBed,
 } from "@/features/registrations/stay"
 import { canReview, useSession } from "@/lib/auth-client"
 import { formatMobile } from "@/lib/phone"
@@ -66,6 +69,14 @@ function Detail({
       <dd className="text-xs/relaxed break-words">{children}</dd>
     </div>
   )
+}
+
+/** "Needed", "Not needed", or "Needed for 2 of 4 people". */
+function accommodationText(registration: Registration) {
+  const summary = accommodationSummary(registration)
+  if (summary === "Yes") return "Needed"
+  if (summary === "No") return "Not needed"
+  return `Needed for ${summary} people`
 }
 
 /** The next steps staff can take from each status. */
@@ -173,15 +184,7 @@ export function RegistrationDetail() {
     [accommodation.data, all.data]
   )
 
-  const back = (
-    <Link
-      to="/registrations"
-      className="inline-flex items-center gap-1 self-start text-2xs text-muted-foreground hover:text-foreground"
-    >
-      <RiArrowLeftLine className="size-3" />
-      All registrations
-    </Link>
-  )
+  const back = <BackLink to="/registrations">All registrations</BackLink>
 
   if (isError) {
     return (
@@ -269,6 +272,9 @@ export function RegistrationDetail() {
           </div>
           <ul className="-mx-4 divide-y divide-border border-t border-border">
             {r.members.map((m) => {
+              const someWantBeds = !["Yes", "No"].includes(
+                accommodationSummary(r)
+              )
               const ownDates =
                 compareStay(m.arrival, r.arrival) !== 0 ||
                 compareStay(m.departure, r.departure) !== 0
@@ -288,6 +294,10 @@ export function RegistrationDetail() {
                       <Badge variant="info">
                         {bed.place.name} · Room {bed.room.label}
                       </Badge>
+                    )}
+                    {/* Only worth saying when the party is split on it. */}
+                    {!bed && someWantBeds && wantsBed(r, m) && (
+                      <Badge variant="outline">Needs a bed</Badge>
                     )}
                   </div>
                   <div className="flex flex-wrap items-center gap-x-1.5 text-2xs/relaxed text-muted-foreground tabular-nums">
@@ -382,10 +392,8 @@ export function RegistrationDetail() {
                       index={index}
                       reviewer={reviewer}
                     />
-                  ) : r.accommodationRequired ? (
-                    "Needed"
                   ) : (
-                    "Not needed"
+                    accommodationText(r)
                   )}
                 </Detail>
               </div>

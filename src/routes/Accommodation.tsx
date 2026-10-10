@@ -166,6 +166,7 @@ function Places({
               </span>
             ) : (
               <ul className="flex flex-col gap-1.5">
+                <li className="text-3xs text-muted-foreground">Beds taken each night</li>
                 {nights.map((n) => (
                   <li key={n.night} className="flex flex-col gap-1">
                     <div className="flex justify-between gap-2 text-2xs text-muted-foreground tabular-nums">
@@ -312,9 +313,11 @@ function SendAll({ index, rows }: { index: AccommodationIndex; rows: Row[] }) {
 
   if (!index.whatsApp) {
     return (
-      <span className="max-w-64 text-2xs/relaxed text-muted-foreground">
-        Sending to everyone at once needs WhatsApp set up on the server. Until
-        then, send room details one by one.
+      <span
+        className="text-2xs/relaxed text-muted-foreground"
+        title="Sending to everyone at once needs WhatsApp set up on the server. Until then, send room details one by one."
+      >
+        Send all: needs WhatsApp
       </span>
     )
   }
@@ -382,7 +385,8 @@ export function Accommodation() {
   const role = session?.user.role
   const reviewer = canReview(role)
   const scope = role === "sanchalak" ? session?.user.mandal : undefined
-  const registrations = useRegistrations()
+  // Polled, so registrations confirmed meanwhile appear under To allot.
+  const registrations = useRegistrations({ poll: true })
   const accommodation = useAccommodation()
   const [params, setParams] = useSearchParams()
   const [allottingId, setAllottingId] = React.useState<string>()

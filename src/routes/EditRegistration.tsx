@@ -1,7 +1,7 @@
-import { RiArrowLeftLine } from "@remixicon/react"
-import { Link, useNavigate, useParams } from "react-router"
+import { useNavigate, useParams } from "react-router"
 
 import { PageHeader } from "@/components/layout/AppShell"
+import { BackLink } from "@/components/layout/BackLink"
 import { LoadError } from "@/components/LoadError"
 import { EmptyState, Skeleton } from "@/components/ui/primitives"
 import { useRegistration } from "@/features/registrations/api"
@@ -19,16 +19,16 @@ export function EditRegistration() {
   const { id = "" } = useParams()
   const navigate = useNavigate()
   const { data: session } = useSession()
-  const { data: registration, isPending, isError, error, refetch } = useRegistration(id)
+  const {
+    data: registration,
+    isPending,
+    isError,
+    error,
+    refetch,
+  } = useRegistration(id)
 
   const back = (
-    <Link
-      to={`/registrations/${id}`}
-      className="inline-flex items-center gap-1 self-start text-2xs text-muted-foreground hover:text-foreground"
-    >
-      <RiArrowLeftLine className="size-3" />
-      Back to the registration
-    </Link>
+    <BackLink to={`/registrations/${id}`}>Back to the registration</BackLink>
   )
 
   if (isPending) {
@@ -40,7 +40,13 @@ export function EditRegistration() {
     )
   }
   if (isError) {
-    return <LoadError title="Could not load this registration" error={error} onRetry={() => void refetch()} />
+    return (
+      <LoadError
+        title="Could not load this registration"
+        error={error}
+        onRetry={() => void refetch()}
+      />
+    )
   }
   if (!registration) {
     return (
@@ -63,8 +69,14 @@ export function EditRegistration() {
         source="staff"
         editing={{ registration, as: "desk" }}
         allowInPerson={canVouchInPerson(session?.user.role)}
-        lockedMandal={session?.user.role === "sanchalak" ? (session.user.mandal ?? undefined) : undefined}
-        onRegistered={(updated) => navigate(`/registrations/${updated.id}`, { replace: true })}
+        lockedMandal={
+          session?.user.role === "sanchalak"
+            ? (session.user.mandal ?? undefined)
+            : undefined
+        }
+        onRegistered={(updated) =>
+          navigate(`/registrations/${updated.id}`, { replace: true })
+        }
       />
     </div>
   )

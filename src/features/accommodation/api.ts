@@ -20,10 +20,15 @@ import type { AccommodationData, Allotment, Place, PlaceInput } from "./types"
 
 const key = ["accommodation"] as const
 
+/**
+ * Polled: several volunteers allot at once, and a room another one just
+ * filled should not keep looking free here.
+ */
 export function useAccommodation() {
   return useQuery({
     queryKey: key,
     queryFn: () => api.get<AccommodationData>("/accommodation"),
+    refetchInterval: 30_000,
   })
 }
 
@@ -35,13 +40,16 @@ function useRefresh() {
 export function useAllot() {
   const refresh = useRefresh()
   return useMutation({
+    /** A room for each person, saved together or not at all. */
     mutationFn: (input: {
       registrationId: string
-      memberIds: string[]
-      placeId: string
-      roomId: string
+      assignments: { memberId: string; placeId: string; roomId: string }[]
+      /** Let them share a family room another registration has: relatives. */
+      allowSharing?: boolean
     }) => api.post<Allotment[]>("/accommodation/allotments", input),
-    onSuccess: refresh,
+    // Also after a refusal: it usually means someone else just took the bed,
+    // and the picker should show that.
+    onSettled: refresh,
   })
 }
 
@@ -50,7 +58,7 @@ export function useRelease() {
   return useMutation({
     mutationFn: (input: { registrationId: string; memberIds: string[] }) =>
       api.post<Allotment[]>("/accommodation/allotments/release", input),
-    onSuccess: refresh,
+    onSettled: refresh,
   })
 }
 
@@ -80,6 +88,21 @@ export function useSendAllNotices() {
       ),
     onSuccess: refresh,
   })
+}
+
+/** A saved place as the editor sends it back, with its rooms replaced by `rooms`. */
+export function asPlaceInput(place: Place, rooms: PlaceInput["rooms"] = place.rooms): PlaceInput {
+  return {
+    name: place.name,
+    kind: place.kind,
+    address: place.address,
+    area: place.area,
+    mapUrl: place.mapUrl,
+    coordinatorName: place.coordinatorName,
+    coordinatorMobile: place.coordinatorMobile,
+    notes: place.notes,
+    rooms,
+  }
 }
 
 /** Adds a place (no `id`) or saves changes to one. */

@@ -57,7 +57,9 @@ export const RELATIONS = [
  * mistake in one of the two fields; the form flags it. Spouse, Grandchild and
  * Other say nothing about gender. Mirrored in upasana-be src/lib/event.ts.
  */
-export const RELATION_GENDER: Partial<Record<(typeof RELATIONS)[number], Gender>> = {
+export const RELATION_GENDER: Partial<
+  Record<(typeof RELATIONS)[number], Gender>
+> = {
   Son: "male",
   Father: "male",
   Brother: "male",
@@ -88,6 +90,11 @@ export type Member = {
   assistanceNote?: string
   arrival: StayPoint
   departure: StayPoint
+  /**
+   * Whether this person asked for a bed, so a family can put up only some of
+   * its members. Read it through `wantsBed` (stay.ts).
+   */
+  needsAccommodation?: boolean
 }
 
 export type Travel = {

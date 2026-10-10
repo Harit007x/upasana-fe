@@ -1,6 +1,6 @@
 import { EVENT, MANDALS, NO_MANDAL } from "@/config/event"
 
-import { isPresentOn } from "./stay"
+import { isPresentOn, wantsBed } from "./stay"
 import {
   TRAVEL_MODES,
   type Registration,
@@ -20,9 +20,17 @@ export function summarize(registrations: Registration[]) {
   const people = active.flatMap((r) => r.members)
 
   const byStatus = Object.fromEntries(
-    (["pending", "confirmed", "checked_in", "cancelled"] as RegistrationStatus[]).map(
-      (status) => [status, registrations.filter((r) => r.status === status).length]
-    )
+    (
+      [
+        "pending",
+        "confirmed",
+        "checked_in",
+        "cancelled",
+      ] as RegistrationStatus[]
+    ).map((status) => [
+      status,
+      registrations.filter((r) => r.status === status).length,
+    ])
   ) as Record<RegistrationStatus, number>
 
   /** Who is on site each event day, and who needs a bed that night. */
@@ -37,11 +45,19 @@ export function summarize(registrations: Registration[]) {
       total: present.length,
       male: present.filter((p) => p.member.gender === "male").length,
       female: present.filter((p) => p.member.gender === "female").length,
-      arriving: active.flatMap((r) => r.members).filter((m) => m.arrival.date === day).length,
-      leaving: active.flatMap((r) => r.members).filter((m) => m.departure.date === day).length,
+      arriving: active
+        .flatMap((r) => r.members)
+        .filter((m) => m.arrival.date === day).length,
+      leaving: active
+        .flatMap((r) => r.members)
+        .filter((m) => m.departure.date === day).length,
       // Staying the night means they are still here the next morning.
       overnight: present.filter(
-        (p) => p.registration.accommodationRequired && p.member.departure.date > day
+        (p) =>
+          // A child under 5 shares a parent's bed.
+          wantsBed(p.registration, p.member) &&
+          p.member.age >= 5 &&
+          p.member.departure.date > day
       ).length,
     }
   })
@@ -80,8 +96,7 @@ export function summarize(registrations: Registration[]) {
     // People who sleep over at least one night; a same-day visitor in the
     // party needs no bed.
     needsAccommodation: active
-      .filter((r) => r.accommodationRequired)
-      .flatMap((r) => r.members)
+      .flatMap((r) => r.members.filter((m) => wantsBed(r, m)))
       .filter((m) => m.departure.date > m.arrival.date).length,
     needsPickup: active
       .filter((r) => r.travel.needsPickup)

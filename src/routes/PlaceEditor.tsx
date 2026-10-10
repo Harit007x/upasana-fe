@@ -1,11 +1,11 @@
-import { RiAddLine, RiArrowLeftLine, RiDeleteBinLine, RiLoader4Line } from "@remixicon/react"
+import { RiAddLine, RiDeleteBinLine, RiLoader4Line } from "@remixicon/react"
 import * as React from "react"
 import { Link, useNavigate, useParams } from "react-router"
 
 import { PageHeader } from "@/components/layout/AppShell"
+import { BackLink } from "@/components/layout/BackLink"
 import { LoadError } from "@/components/LoadError"
 import { Button } from "@/components/ui/button"
-import { Checkbox } from "@/components/ui/choice"
 import {
   Dialog,
   DialogBody,
@@ -15,19 +15,39 @@ import {
 } from "@/components/ui/dialog"
 import { DigitsInput, Field, Input, Textarea } from "@/components/ui/input"
 import { PhoneInput } from "@/components/ui/phone-input"
-import { Card, CardDescription, CardHeader, CardTitle, EmptyState, Skeleton } from "@/components/ui/primitives"
+import {
+  Card,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+  EmptyState,
+  Skeleton,
+} from "@/components/ui/primitives"
 import { NativeSelect } from "@/components/ui/select"
-import { useAccommodation, useDeletePlace, useSavePlace } from "@/features/accommodation/api"
-import { indexAccommodation, type AccommodationIndex } from "@/features/accommodation/rules"
+import {
+  useAccommodation,
+  useDeletePlace,
+  useSavePlace,
+} from "@/features/accommodation/api"
+import {
+  indexAccommodation,
+  type AccommodationIndex,
+} from "@/features/accommodation/rules"
 import {
   PLACE_KINDS,
+  FLOORS,
   ROOM_KINDS,
   type Place,
   type PlaceKind,
   type RoomKind,
 } from "@/features/accommodation/types"
 import { useRegistrations } from "@/features/registrations/api"
-import { DEFAULT_COUNTRY_CODE, fromE164, mobileError, toE164 } from "@/lib/phone"
+import {
+  DEFAULT_COUNTRY_CODE,
+  fromE164,
+  mobileError,
+  toE164,
+} from "@/lib/phone"
 
 type RoomDraft = {
   /** Local key for the list; `id` is the saved room's, missing on a new one. */
@@ -35,8 +55,11 @@ type RoomDraft = {
   id?: string
   label: string
   beds: string
+  /** Extra mattresses on top of the beds. */
+  extraBeds: string
   kind: RoomKind
-  groundFloor: boolean
+  /** 0 = ground floor … 4 = 4th floor. */
+  floor: number
 }
 
 const newKey = () => crypto.randomUUID()
@@ -81,29 +104,53 @@ export function PlaceEditor() {
 
   const place = id ? index.placeById.get(id) : undefined
   if (id && !place) {
-    return <EmptyState title="Place not found" description="It may have been removed." />
+    return (
+      <EmptyState
+        title="Place not found"
+        description="It may have been removed."
+      />
+    )
   }
   return <PlaceForm key={place?.id ?? "new"} place={place} index={index} />
 }
 
-function PlaceForm({ place, index }: { place?: Place; index: AccommodationIndex }) {
+function PlaceForm({
+  place,
+  index,
+}: {
+  place?: Place
+  index: AccommodationIndex
+}) {
   const navigate = useNavigate()
   const save = useSavePlace(place?.id)
   const remove = useDeletePlace()
-  const phone = place?.coordinatorMobile ? fromE164(place.coordinatorMobile) : undefined
+  const phone = place?.coordinatorMobile
+    ? fromE164(place.coordinatorMobile)
+    : undefined
 
   const [name, setName] = React.useState(place?.name ?? "")
-  const [kind, setKind] = React.useState<PlaceKind>(place?.kind ?? "guest_house")
+  const [kind, setKind] = React.useState<PlaceKind>(
+    place?.kind ?? "guest_house"
+  )
   const [address, setAddress] = React.useState(place?.address ?? "")
   const [area, setArea] = React.useState(place?.area ?? "")
   const [mapUrl, setMapUrl] = React.useState(place?.mapUrl ?? "")
-  const [coordinatorName, setCoordinatorName] = React.useState(place?.coordinatorName ?? "")
-  const [country, setCountry] = React.useState<string>(phone?.code ?? DEFAULT_COUNTRY_CODE)
+  const [coordinatorName, setCoordinatorName] = React.useState(
+    place?.coordinatorName ?? ""
+  )
+  const [country, setCountry] = React.useState<string>(
+    phone?.code ?? DEFAULT_COUNTRY_CODE
+  )
   const [mobile, setMobile] = React.useState(phone?.national ?? "")
   const [notes, setNotes] = React.useState(place?.notes ?? "")
   const [rooms, setRooms] = React.useState<RoomDraft[]>(
     () =>
-      place?.rooms.map((r) => ({ ...r, key: r.id, beds: String(r.beds) })) ?? []
+      place?.rooms.map((r) => ({
+        ...r,
+        key: r.id,
+        beds: String(r.beds),
+        extraBeds: String(r.extraBeds ?? 0),
+      })) ?? []
   )
   const [errors, setErrors] = React.useState<Record<string, string>>({})
   const [confirmDelete, setConfirmDelete] = React.useState(false)
@@ -111,28 +158,41 @@ function PlaceForm({ place, index }: { place?: Place; index: AccommodationIndex 
   // "Add several rooms"
   const [bulkCount, setBulkCount] = React.useState("1")
   const [bulkBeds, setBulkBeds] = React.useState("2")
+  const [bulkExtra, setBulkExtra] = React.useState("0")
   const [bulkKind, setBulkKind] = React.useState<RoomKind>("family")
+  const [bulkFloor, setBulkFloor] = React.useState(0)
 
   /** People in a saved room, on any night. */
   const peopleIn = (roomId?: string) =>
     place && roomId ? index.occupantsOf(place.id, roomId).length : 0
-  const totalPeople = place ? place.rooms.reduce((sum, r) => sum + peopleIn(r.id), 0) : 0
+  const totalPeople = place
+    ? place.rooms.reduce((sum, r) => sum + peopleIn(r.id), 0)
+    : 0
   const totalBeds = rooms.reduce((sum, r) => sum + (Number(r.beds) || 0), 0)
 
   const updateRoom = (key: string, change: Partial<RoomDraft>) =>
-    setRooms((list) => list.map((r) => (r.key === key ? { ...r, ...change } : r)))
+    setRooms((list) =>
+      list.map((r) => (r.key === key ? { ...r, ...change } : r))
+    )
+
+  // "Add more rooms": how many (1–100), numbered on from the highest.
+  const bulkTotal = Math.min(100, Math.max(1, Number(bulkCount) || 1))
+  const bulkStart = nextNumber(rooms)
+  const bulkBedsEach = Number(bulkBeds) || 1
+  const bulkExtraEach = Number(bulkExtra) || 0
 
   const addRooms = () => {
-    const count = Math.min(100, Math.max(1, Number(bulkCount) || 1))
-    const start = nextNumber(rooms)
+    const count = bulkTotal
+    const start = bulkStart
     setRooms((list) => [
       ...list,
       ...Array.from({ length: count }, (_, i) => ({
         key: newKey(),
         label: String(start + i),
         beds: bulkBeds || "1",
+        extraBeds: bulkExtra || "0",
         kind: bulkKind,
-        groundFloor: false,
+        floor: bulkFloor,
       })),
     ])
   }
@@ -153,9 +213,12 @@ function PlaceForm({ place, index }: { place?: Place; index: AccommodationIndex 
       const label = room.label.trim().toLowerCase()
       const beds = Number(room.beds)
       if (!label) found[`room-${room.key}`] = "Give the room a number or name"
-      else if (seen.has(label)) found[`room-${room.key}`] = `Room ${room.label} is listed twice`
+      else if (seen.has(label))
+        found[`room-${room.key}`] = `Room ${room.label} is listed twice`
       else if (!Number.isInteger(beds) || beds < 1 || beds > 50) {
         found[`room-${room.key}`] = "Beds must be 1 to 50"
+      } else if (Number(room.extraBeds || 0) > 20) {
+        found[`room-${room.key}`] = "Extra mattresses must be 0 to 20"
       }
       seen.add(label)
     }
@@ -180,8 +243,9 @@ function PlaceForm({ place, index }: { place?: Place; index: AccommodationIndex 
           id: room.id,
           label: room.label.trim(),
           beds: Number(room.beds),
+          extraBeds: Number(room.extraBeds || 0),
           kind: room.kind,
-          groundFloor: room.groundFloor,
+          floor: room.floor,
         })),
       },
       { onSuccess: (saved) => navigate(`/accommodation/places/${saved.id}`) }
@@ -189,14 +253,16 @@ function PlaceForm({ place, index }: { place?: Place; index: AccommodationIndex 
   }
 
   return (
-    <form noValidate onSubmit={submit} className="mx-auto flex w-full max-w-3xl flex-col gap-5">
-      <Link
+    <form
+      noValidate
+      onSubmit={submit}
+      className="mx-auto flex w-full max-w-3xl flex-col gap-5"
+    >
+      <BackLink
         to={place ? `/accommodation/places/${place.id}` : "/accommodation"}
-        className="inline-flex items-center gap-1 self-start text-2xs text-muted-foreground hover:text-foreground"
       >
-        <RiArrowLeftLine className="size-3" />
         {place ? place.name : "Accommodation"}
-      </Link>
+      </BackLink>
       <PageHeader
         title={place ? `Edit ${place.name}` : "Add a place"}
         description={`${rooms.length} rooms · ${totalBeds} beds`}
@@ -208,10 +274,19 @@ function PlaceForm({ place, index }: { place?: Place; index: AccommodationIndex 
         </CardHeader>
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label="Name" required error={errors.name}>
-            <Input id="place-name" value={name} aria-invalid={!!errors.name} onChange={(e) => setName(e.target.value)} />
+            <Input
+              id="place-name"
+              value={name}
+              aria-invalid={!!errors.name}
+              onChange={(e) => setName(e.target.value)}
+            />
           </Field>
           <Field label="Type">
-            <NativeSelect id="place-kind" value={kind} onChange={(e) => setKind(e.target.value as PlaceKind)}>
+            <NativeSelect
+              id="place-kind"
+              value={kind}
+              onChange={(e) => setKind(e.target.value as PlaceKind)}
+            >
               {Object.entries(PLACE_KINDS).map(([value, label]) => (
                 <option key={value} value={value}>
                   {label}
@@ -219,11 +294,26 @@ function PlaceForm({ place, index }: { place?: Place; index: AccommodationIndex 
               ))}
             </NativeSelect>
           </Field>
-          <Field label="Address" required error={errors.address} className="sm:col-span-2">
-            <Input id="place-address" value={address} aria-invalid={!!errors.address} onChange={(e) => setAddress(e.target.value)} />
+          <Field
+            label="Address"
+            required
+            error={errors.address}
+            className="sm:col-span-2"
+          >
+            <Input
+              id="place-address"
+              value={address}
+              aria-invalid={!!errors.address}
+              onChange={(e) => setAddress(e.target.value)}
+            />
           </Field>
           <Field label="Area">
-            <Input id="place-area" placeholder="Memnagar" value={area} onChange={(e) => setArea(e.target.value)} />
+            <Input
+              id="place-area"
+              placeholder="Memnagar"
+              value={area}
+              onChange={(e) => setArea(e.target.value)}
+            />
           </Field>
           <Field label="Google Maps link" error={errors.mapUrl}>
             <Input
@@ -235,7 +325,11 @@ function PlaceForm({ place, index }: { place?: Place; index: AccommodationIndex 
             />
           </Field>
           <Field label="Coordinator">
-            <Input id="place-coordinator" value={coordinatorName} onChange={(e) => setCoordinatorName(e.target.value)} />
+            <Input
+              id="place-coordinator"
+              value={coordinatorName}
+              onChange={(e) => setCoordinatorName(e.target.value)}
+            />
           </Field>
           <Field label="Coordinator's mobile" error={errors.mobile}>
             <PhoneInput
@@ -243,12 +337,22 @@ function PlaceForm({ place, index }: { place?: Place; index: AccommodationIndex 
               countryCode={country}
               placeholder="9876543210"
               invalid={!!errors.mobile}
-              codeProps={{ value: country, onChange: (e) => setCountry(e.target.value) }}
-              numberProps={{ value: mobile, onChange: (e) => setMobile(e.target.value) }}
+              codeProps={{
+                value: country,
+                onChange: (e) => setCountry(e.target.value),
+              }}
+              numberProps={{
+                value: mobile,
+                onChange: (e) => setMobile(e.target.value),
+              }}
             />
           </Field>
           <Field label="Notes" className="sm:col-span-2">
-            <Textarea id="place-notes" value={notes} onChange={(e) => setNotes(e.target.value)} />
+            <Textarea
+              id="place-notes"
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+            />
           </Field>
         </div>
       </Card>
@@ -258,13 +362,16 @@ function PlaceForm({ place, index }: { place?: Place; index: AccommodationIndex 
           <CardTitle>Rooms</CardTitle>
           <CardDescription>
             Gents and ladies rooms take only men or only women; a family room
-            takes one registration's people. Mark the ground-floor rooms — people
-            who need assistance or are 60+ are steered to them.
+            takes one registration's people; a general room takes anyone. Extra
+            mattresses are used only when a room's beds run out. People who need
+            assistance or are 60+ are offered the lowest floors first.
           </CardDescription>
         </CardHeader>
 
         {rooms.length === 0 ? (
-          <p className="text-xs/relaxed text-muted-foreground">No rooms yet. Add them below.</p>
+          <p className="text-xs/relaxed text-muted-foreground">
+            No rooms yet. Add them below.
+          </p>
         ) : (
           <ul className="-mx-4 flex flex-col divide-y divide-border border-y border-border">
             {rooms.map((room) => {
@@ -277,7 +384,9 @@ function PlaceForm({ place, index }: { place?: Place; index: AccommodationIndex 
                       aria-label="Room number or name"
                       value={room.label}
                       aria-invalid={!!error}
-                      onChange={(e) => updateRoom(room.key, { label: e.target.value })}
+                      onChange={(e) =>
+                        updateRoom(room.key, { label: e.target.value })
+                      }
                       className="w-24 sm:w-20"
                     />
                     <div className="flex items-center gap-1.5">
@@ -285,15 +394,36 @@ function PlaceForm({ place, index }: { place?: Place; index: AccommodationIndex 
                         aria-label="Beds"
                         maxLength={2}
                         value={room.beds}
-                        onChange={(e) => updateRoom(room.key, { beds: e.target.value })}
+                        onChange={(e) =>
+                          updateRoom(room.key, { beds: e.target.value })
+                        }
                         className="w-16 sm:w-12"
                       />
-                      <span className="text-2xs text-muted-foreground">beds</span>
+                      <span className="text-2xs text-muted-foreground">
+                        beds +
+                      </span>
+                      <DigitsInput
+                        aria-label="Extra mattresses"
+                        title="Extra mattresses, used only when the beds run out"
+                        maxLength={2}
+                        value={room.extraBeds}
+                        onChange={(e) =>
+                          updateRoom(room.key, { extraBeds: e.target.value })
+                        }
+                        className="w-14 sm:w-10"
+                      />
+                      <span className="text-2xs text-muted-foreground">
+                        extra
+                      </span>
                     </div>
                     <NativeSelect
                       aria-label="Room type"
                       value={room.kind}
-                      onChange={(e) => updateRoom(room.key, { kind: e.target.value as RoomKind })}
+                      onChange={(e) =>
+                        updateRoom(room.key, {
+                          kind: e.target.value as RoomKind,
+                        })
+                      }
                       className="w-32 sm:w-28"
                     >
                       {Object.entries(ROOM_KINDS).map(([value, label]) => (
@@ -302,12 +432,20 @@ function PlaceForm({ place, index }: { place?: Place; index: AccommodationIndex 
                         </option>
                       ))}
                     </NativeSelect>
-                    <Checkbox
-                      id={`ground-${room.key}`}
-                      label="Ground floor"
-                      checked={room.groundFloor}
-                      onChange={(e) => updateRoom(room.key, { groundFloor: e.target.checked })}
-                    />
+                    <NativeSelect
+                      aria-label="Floor"
+                      value={room.floor}
+                      onChange={(e) =>
+                        updateRoom(room.key, { floor: Number(e.target.value) })
+                      }
+                      className="w-36 sm:w-28"
+                    >
+                      {FLOORS.map((label, value) => (
+                        <option key={value} value={value}>
+                          {label}
+                        </option>
+                      ))}
+                    </NativeSelect>
                     <span className="ml-auto flex items-center gap-2">
                       {people > 0 && (
                         <span className="text-2xs text-muted-foreground tabular-nums">
@@ -319,57 +457,119 @@ function PlaceForm({ place, index }: { place?: Place; index: AccommodationIndex 
                         variant="ghost"
                         size="icon-sm"
                         aria-label={`Remove room ${room.label}`}
-                        title={people > 0 ? "Move its people to another room first" : undefined}
+                        title={
+                          people > 0
+                            ? "Move its people to another room first"
+                            : undefined
+                        }
                         disabled={people > 0}
-                        onClick={() => setRooms((list) => list.filter((r) => r.key !== room.key))}
+                        onClick={() =>
+                          setRooms((list) =>
+                            list.filter((r) => r.key !== room.key)
+                          )
+                        }
                       >
                         <RiDeleteBinLine />
                       </Button>
                     </span>
                   </div>
-                  {error && <p className="text-2xs/relaxed text-destructive">{error}</p>}
+                  {error && (
+                    <p className="text-2xs/relaxed text-destructive">{error}</p>
+                  )}
                 </li>
               )
             })}
           </ul>
         )}
 
-        <div className="flex flex-wrap items-end gap-2 rounded-md bg-muted/60 p-3">
-          <Field label="Add rooms">
-            <DigitsInput
-              id="bulk-count"
-              maxLength={3}
-              value={bulkCount}
-              onChange={(e) => setBulkCount(e.target.value)}
-              className="w-20 sm:w-16"
-            />
-          </Field>
-          <Field label="Beds each">
-            <DigitsInput
-              id="bulk-beds"
-              maxLength={2}
-              value={bulkBeds}
-              onChange={(e) => setBulkBeds(e.target.value)}
-              className="w-20 sm:w-16"
-            />
-          </Field>
-          <Field label="Type">
-            <NativeSelect id="bulk-kind" value={bulkKind} onChange={(e) => setBulkKind(e.target.value as RoomKind)} className="w-32 sm:w-28">
-              {Object.entries(ROOM_KINDS).map(([value, label]) => (
-                <option key={value} value={value}>
-                  {label}
-                </option>
-              ))}
-            </NativeSelect>
-          </Field>
-          <Button type="button" variant="outline" size="lg" onClick={addRooms}>
-            <RiAddLine />
-            Add, numbered from {nextNumber(rooms)}
-          </Button>
+        {/* Several rooms alike in one go: each box labelled in full, and a
+            line saying exactly what the button will add. */}
+        <div className="flex flex-col gap-3 rounded-md bg-muted/60 p-3">
+          <p className="text-xs/relaxed font-medium">Add more rooms</p>
+          {/* Equal columns, boxes aligned along the bottom: a label that
+              wraps on a narrow screen never pushes its box out of line. */}
+          <div className="grid grid-cols-2 items-end gap-3 sm:grid-cols-5">
+            <Field label="How many rooms">
+              <DigitsInput
+                id="bulk-count"
+                maxLength={3}
+                value={bulkCount}
+                onChange={(e) => setBulkCount(e.target.value)}
+              />
+            </Field>
+            <Field label="Beds in each">
+              <DigitsInput
+                id="bulk-beds"
+                maxLength={2}
+                value={bulkBeds}
+                onChange={(e) => setBulkBeds(e.target.value)}
+              />
+            </Field>
+            <Field label="Extra mattresses">
+              <DigitsInput
+                id="bulk-extra"
+                maxLength={2}
+                value={bulkExtra}
+                onChange={(e) => setBulkExtra(e.target.value)}
+              />
+            </Field>
+            <Field label="Type">
+              <NativeSelect
+                id="bulk-kind"
+                value={bulkKind}
+                onChange={(e) => setBulkKind(e.target.value as RoomKind)}
+              >
+                {Object.entries(ROOM_KINDS).map(([value, label]) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ))}
+              </NativeSelect>
+            </Field>
+            <Field label="Floor" className="col-span-2 sm:col-span-1">
+              <NativeSelect
+                id="bulk-floor"
+                value={bulkFloor}
+                onChange={(e) => setBulkFloor(Number(e.target.value))}
+              >
+                {FLOORS.map((label, value) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ))}
+              </NativeSelect>
+            </Field>
+          </div>
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-2xs/relaxed text-muted-foreground">
+              Adds{" "}
+              {bulkTotal === 1
+                ? `Room ${bulkStart}`
+                : `Rooms ${bulkStart}–${bulkStart + bulkTotal - 1}`}
+              : {ROOM_KINDS[bulkKind].toLowerCase()}, {bulkBedsEach}{" "}
+              {bulkBedsEach === 1 ? "bed" : "beds"}
+              {bulkExtraEach > 0 &&
+                ` + ${bulkExtraEach} extra ${bulkExtraEach === 1 ? "mattress" : "mattresses"}`}
+              {bulkTotal > 1 && " each"}, on the{" "}
+              {FLOORS[bulkFloor].toLowerCase()}.
+            </p>
+            <Button
+              type="button"
+              variant="outline"
+              size="lg"
+              onClick={addRooms}
+              className="shrink-0"
+            >
+              <RiAddLine />
+              Add {bulkTotal === 1 ? "room" : `${bulkTotal} rooms`}
+            </Button>
+          </div>
         </div>
       </Card>
 
-      {save.isError && <p className="text-xs/relaxed text-destructive">{save.error.message}</p>}
+      {save.isError && (
+        <p className="text-xs/relaxed text-destructive">{save.error.message}</p>
+      )}
 
       <div className="flex flex-wrap items-center gap-2">
         {place && (
@@ -378,7 +578,9 @@ function PlaceForm({ place, index }: { place?: Place; index: AccommodationIndex 
             variant="destructive"
             size="lg"
             disabled={totalPeople > 0}
-            title={totalPeople > 0 ? "Move everyone staying here first" : undefined}
+            title={
+              totalPeople > 0 ? "Move everyone staying here first" : undefined
+            }
             onClick={() => setConfirmDelete(true)}
           >
             <RiDeleteBinLine />
@@ -402,9 +604,16 @@ function PlaceForm({ place, index }: { place?: Place; index: AccommodationIndex 
       {place && (
         <Dialog open={confirmDelete} onOpenChange={setConfirmDelete}>
           <DialogContent>
-            <DialogHeader title={`Remove ${place.name}?`} description="Its rooms go with it. Nobody is staying there." />
+            <DialogHeader
+              title={`Remove ${place.name}?`}
+              description="Its rooms go with it. Nobody is staying there."
+            />
             <DialogBody>
-              {remove.isError && <p className="text-2xs/relaxed text-destructive">{remove.error.message}</p>}
+              {remove.isError && (
+                <p className="text-2xs/relaxed text-destructive">
+                  {remove.error.message}
+                </p>
+              )}
             </DialogBody>
             <DialogFooter>
               <Button variant="ghost" onClick={() => setConfirmDelete(false)}>
@@ -414,7 +623,10 @@ function PlaceForm({ place, index }: { place?: Place; index: AccommodationIndex 
                 variant="destructive"
                 disabled={remove.isPending}
                 onClick={() =>
-                  remove.mutate(place.id, { onSuccess: () => navigate("/accommodation", { replace: true }) })
+                  remove.mutate(place.id, {
+                    onSuccess: () =>
+                      navigate("/accommodation", { replace: true }),
+                  })
                 }
               >
                 Remove place

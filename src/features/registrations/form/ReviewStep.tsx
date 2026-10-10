@@ -6,15 +6,28 @@ import { Field, RequiredMark, Textarea } from "@/components/ui/input"
 import { TIME_SLOTS, formatStayDate, type TimeSlot } from "@/config/event"
 import { formatMobile, toE164 } from "@/lib/phone"
 
-import { GENDERS, REGISTRATION_TYPES, TRAVEL_MODES, type Gender, type TravelMode } from "../types"
+import {
+  GENDERS,
+  REGISTRATION_TYPES,
+  TRAVEL_MODES,
+  type Gender,
+  type TravelMode,
+} from "../types"
 import {
   hasSplitDates,
+  bedsWanted,
   needsAccommodation,
   vehicleSlots,
   type RegistrationFormValues,
 } from "./schema"
 
-function Row({ label, children }: { label: string; children: React.ReactNode }) {
+function Row({
+  label,
+  children,
+}: {
+  label: string
+  children: React.ReactNode
+}) {
   return (
     <div className="grid grid-cols-[6.5rem_1fr] gap-3 py-2.5 text-xs/relaxed sm:grid-cols-[8rem_1fr] sm:py-2">
       <dt className="text-muted-foreground">{label}</dt>
@@ -29,13 +42,18 @@ const stayText = (date: string, slot: string) =>
     : "—"
 
 /** Step 4: everything on one screen before it is sent. */
-export function ReviewStep({ onEditStep }: { onEditStep: (step: number) => void }) {
+export function ReviewStep({
+  onEditStep,
+}: {
+  onEditStep: (step: number) => void
+}) {
   const {
     register,
     getValues,
     formState: { errors },
   } = useFormContext<RegistrationFormValues>()
   const values = getValues()
+  const beds = bedsWanted(values)
   const mode = values.travelMode as TravelMode
 
   const editButton = (step: number) => (
@@ -57,7 +75,9 @@ export function ReviewStep({ onEditStep }: { onEditStep: (step: number) => void 
         </div>
         <dl className="divide-y divide-border">
           <Row label="Type">{REGISTRATION_TYPES[values.type]}</Row>
-          {values.type !== "individual" && <Row label="Name">{values.groupName}</Row>}
+          {values.type !== "individual" && (
+            <Row label="Name">{values.groupName}</Row>
+          )}
           <Row label="Mandal">{values.mandal}</Row>
           <Row label="From">{values.city}</Row>
         </dl>
@@ -72,14 +92,23 @@ export function ReviewStep({ onEditStep }: { onEditStep: (step: number) => void 
         </div>
         <ul className="divide-y divide-border rounded-md border border-border">
           {values.members.map((member, index) => (
-            <li key={index} className="flex flex-col gap-0.5 px-3 py-2.5 sm:py-2">
+            <li
+              key={index}
+              className="flex flex-col gap-0.5 px-3 py-2.5 sm:py-2"
+            >
               <span className="text-xs/relaxed font-medium break-words">
                 {member.fullName}
                 {index === 0 && (
-                  <span className="font-normal text-muted-foreground"> · contact</span>
+                  <span className="font-normal text-muted-foreground">
+                    {" "}
+                    · contact
+                  </span>
                 )}
                 {member.relation && index > 0 && values.type === "family" && (
-                  <span className="font-normal text-muted-foreground"> · {member.relation}</span>
+                  <span className="font-normal text-muted-foreground">
+                    {" "}
+                    · {member.relation}
+                  </span>
                 )}
               </span>
               <span className="text-2xs/relaxed text-muted-foreground tabular-nums">
@@ -87,7 +116,9 @@ export function ReviewStep({ onEditStep }: { onEditStep: (step: number) => void 
                 {member.mobile &&
                   ` · ${formatMobile(toE164(member.mobileCountry, member.mobile))}`}
                 {member.needsAssistance && " · needs assistance"}
-                {index === 0 && values.verifiedInPerson && " · verified in person"}
+                {index === 0 &&
+                  values.verifiedInPerson &&
+                  " · verified in person"}
               </span>
             </li>
           ))}
@@ -102,8 +133,12 @@ export function ReviewStep({ onEditStep }: { onEditStep: (step: number) => void 
         <dl className="divide-y divide-border">
           {!hasSplitDates(values) ? (
             <>
-              <Row label="Arriving">{stayText(values.arrivalDate, values.arrivalSlot)}</Row>
-              <Row label="Leaving">{stayText(values.departureDate, values.departureSlot)}</Row>
+              <Row label="Arriving">
+                {stayText(values.arrivalDate, values.arrivalSlot)}
+              </Row>
+              <Row label="Leaving">
+                {stayText(values.departureDate, values.departureSlot)}
+              </Row>
             </>
           ) : (
             values.members.map((member, index) => (
@@ -115,15 +150,18 @@ export function ReviewStep({ onEditStep }: { onEditStep: (step: number) => void 
           )}
           <Row label="Travel">
             {TRAVEL_MODES[mode]}
-            {mode === "personal_vehicle" && (() => {
-              const count = vehicleSlots(values)
-              const numbers = values.vehicleNumbers
-                .slice(0, count)
-                .map((number) => (number ?? "").trim().toUpperCase())
-                .filter(Boolean)
-              return ` · ${count} ${count === 1 ? "vehicle" : "vehicles"}${numbers.length ? ` · ${numbers.join(", ")}` : ""}`
-            })()}
-            {mode !== "personal_vehicle" && values.travelReference && ` · ${values.travelReference}`}
+            {mode === "personal_vehicle" &&
+              (() => {
+                const count = vehicleSlots(values)
+                const numbers = values.vehicleNumbers
+                  .slice(0, count)
+                  .map((number) => (number ?? "").trim().toUpperCase())
+                  .filter(Boolean)
+                return ` · ${count} ${count === 1 ? "vehicle" : "vehicles"}${numbers.length ? ` · ${numbers.join(", ")}` : ""}`
+              })()}
+            {mode !== "personal_vehicle" &&
+              values.travelReference &&
+              ` · ${values.travelReference}`}
             {(mode === "train" || mode === "flight") && values.needsPickup && (
               <Badge variant="info" className="ml-2 align-middle">
                 Pickup needed
@@ -137,9 +175,23 @@ export function ReviewStep({ onEditStep }: { onEditStep: (step: number) => void 
           </Row>
           <Row label="Accommodation">
             {needsAccommodation(values) ? (
-              <Badge variant="info" className="align-middle">
-                Needed
-              </Badge>
+              <>
+                <Badge variant="info" className="align-middle">
+                  Needed
+                </Badge>
+                {/* Only some of the party: say who. */}
+                {beds.includes(false) && (
+                  <span className="ml-2">
+                    for{" "}
+                    {values.members
+                      .map((m, i) =>
+                        beds[i] ? m.fullName || `Person ${i + 1}` : ""
+                      )
+                      .filter(Boolean)
+                      .join(", ")}
+                  </span>
+                )}
+              </>
             ) : (
               "Not needed"
             )}

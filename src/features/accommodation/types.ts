@@ -9,16 +9,37 @@
 export const PLACE_KINDS = { guest_house: "Guest house", hotel: "Hotel" } as const
 export type PlaceKind = keyof typeof PLACE_KINDS
 
-export const ROOM_KINDS = { gents: "Gents", ladies: "Ladies", family: "Family" } as const
+export const ROOM_KINDS = {
+  gents: "Gents",
+  ladies: "Ladies",
+  family: "Family",
+  /** Anyone: no gender or family rule, only the beds limit it. */
+  general: "General",
+} as const
 export type RoomKind = keyof typeof ROOM_KINDS
+
+/** The floors a room can be on, by number: 0 is the ground floor. */
+export const FLOORS = [
+  "Ground floor",
+  "1st floor",
+  "2nd floor",
+  "3rd floor",
+  "4th floor",
+] as const
+
+/** "Ground floor", "2nd floor" — for an unexpected number, "Floor 7". */
+export const floorLabel = (floor: number) => FLOORS[floor] ?? `Floor ${floor}`
 
 export type Room = {
   /** Stable: allotments point at it, so relabelling a room keeps its people. */
   id: string
   label: string
   beds: number
+  /** Mattresses the room can take on top of its beds, used only when the beds run out. */
+  extraBeds?: number
   kind: RoomKind
-  groundFloor: boolean
+  /** 0 = ground floor, 1 = 1st floor … 4 = 4th floor. */
+  floor: number
 }
 
 export type Place = {
@@ -43,6 +64,8 @@ export type Allotment = {
   memberId: string
   placeId: string
   roomId: string
+  /** The team let them share another registration's family room: relatives. */
+  sharesRoom?: boolean
   allottedByName: string
   allottedAt: string
 }

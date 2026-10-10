@@ -24,10 +24,22 @@ const keys = {
   detail: (id: string) => ["registrations", id] as const,
 }
 
-export function useRegistrations() {
+/**
+ * Rooms follow registrations: cancelling one, unticking accommodation or
+ * removing someone frees beds on the server, so the accommodation data is
+ * refreshed along with the registrations.
+ */
+const ACCOMMODATION = ["accommodation"] as const
+
+/**
+ * `poll`: refetch every so often — for screens volunteers keep open while
+ * others register and confirm people (the Accommodation screen).
+ */
+export function useRegistrations({ poll }: { poll?: boolean } = {}) {
   return useQuery({
     queryKey: keys.all,
     queryFn: () => api.get<Registration[]>("/registrations"),
+    refetchInterval: poll ? 30_000 : undefined,
   })
 }
 
@@ -69,6 +81,7 @@ export function useToggleSampleData() {
         queryClient.invalidateQueries({ queryKey: ["sample-data"] }),
         // Every list, detail and count of registrations changes.
         queryClient.invalidateQueries({ queryKey: keys.all }),
+        queryClient.invalidateQueries({ queryKey: ACCOMMODATION }),
       ]),
   })
 }
@@ -89,7 +102,11 @@ export function useSetRegistrationStatus() {
       api.patch<Registration>(`/registrations/${id}/status`, { status }),
     onSuccess: (updated) => {
       queryClient.setQueryData(keys.detail(updated.id), updated)
-      return queryClient.invalidateQueries({ queryKey: keys.all, exact: true })
+      return Promise.all([
+        queryClient.invalidateQueries({ queryKey: keys.all, exact: true }),
+        // Cancelling frees their beds.
+        queryClient.invalidateQueries({ queryKey: ACCOMMODATION }),
+      ])
     },
   })
 }
@@ -154,7 +171,11 @@ export function useUpdateRegistration(id: string) {
       api.patch<Registration>(`/registrations/${id}`, input),
     onSuccess: (updated) => {
       queryClient.setQueryData(keys.detail(updated.id), updated)
-      return queryClient.invalidateQueries({ queryKey: keys.all, exact: true })
+      return Promise.all([
+        queryClient.invalidateQueries({ queryKey: keys.all, exact: true }),
+        // Removing someone, or unticking their bed, frees it.
+        queryClient.invalidateQueries({ queryKey: ACCOMMODATION }),
+      ])
     },
   })
 }

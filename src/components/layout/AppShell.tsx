@@ -1,0 +1,210 @@
+import {
+  RiCalendarScheduleLine,
+  RiDashboardLine,
+  RiExternalLinkLine,
+  RiFileList3Line,
+  RiHotelBedLine,
+  RiLogoutBoxRLine,
+  RiShieldUserLine,
+  RiUserAddLine,
+} from "@remixicon/react"
+import { useQueryClient } from "@tanstack/react-query"
+import { cn } from "cn"
+import * as React from "react"
+import { NavLink, Outlet, useNavigate } from "react-router"
+
+import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/primitives"
+import { EVENT, formatEventRange } from "@/config/event"
+import { isAdmin, roleLabel, signOut, useSession } from "@/lib/auth-client"
+
+type NavItem = {
+  to: string
+  label: string
+  short: string
+  icon: typeof RiDashboardLine
+  /** Also active on the pages under it (a place under Accommodation). */
+  nested?: boolean
+}
+
+const NAV: NavItem[] = [
+  { to: "/", label: "Overview", short: "Overview", icon: RiDashboardLine },
+  { to: "/registrations", label: "Registrations", short: "Registrations", icon: RiFileList3Line },
+  { to: "/registrations/new", label: "New registration", short: "Register", icon: RiUserAddLine },
+  { to: "/accommodation", label: "Accommodation", short: "Stay", icon: RiHotelBedLine, nested: true },
+]
+
+const ADMIN_NAV: NavItem[] = [
+  { to: "/admin/schedule", label: "Schedule", short: "Schedule", icon: RiCalendarScheduleLine },
+  { to: "/admin", label: "Team", short: "Team", icon: RiShieldUserLine },
+]
+
+function SignOutButton() {
+  const navigate = useNavigate()
+  const queryClient = useQueryClient()
+  const [signingOut, setSigningOut] = React.useState(false)
+
+  /**
+   * The cache is cleared *after* the redirect, and it is not optional: React
+   * Query keys data by id alone, with nothing about who it belongs to, so a
+   * second sign-in on the same tab would otherwise paint the previous account's
+   * data for as long as the refetch takes.
+   */
+  const handleSignOut = async () => {
+    setSigningOut(true)
+    const result = await signOut()
+    if (result.error) {
+      setSigningOut(false)
+      return
+    }
+    navigate("/login", { replace: true })
+    queryClient.clear()
+  }
+
+  return (
+    <Button
+      variant="ghost"
+      size="icon-sm"
+      aria-label="Sign out"
+      disabled={signingOut}
+      onClick={handleSignOut}
+    >
+      <RiLogoutBoxRLine />
+    </Button>
+  )
+}
+
+/** Who is signed in, from `md` up. Phones are short on header room. */
+function SignedInAs() {
+  const { data: session } = useSession()
+  if (!session) return null
+  return (
+    <span className="hidden max-w-48 items-center gap-1.5 text-2xs text-muted-foreground md:flex">
+      <span className="truncate">{session.user.name}</span>
+      {(session.user.role === "admin" || session.user.role === "sanchalak") && (
+        <Badge variant="outline">{roleLabel(session.user.role, session.user.mandal)}</Badge>
+      )}
+    </span>
+  )
+}
+
+/**
+ * The staff side: event name on top, navigation, and the current screen below.
+ *
+ * On a phone the navigation is a tab bar along the bottom, within thumb reach;
+ * from `sm` up it moves into the header as tabs. `--bottom-nav-h` carries the
+ * tab bar's height so anything pinned to the bottom (the form's Continue bar)
+ * can sit just above it.
+ */
+export function AppShell() {
+  const { data: session } = useSession()
+  const nav = isAdmin(session?.user.role) ? [...NAV, ...ADMIN_NAV] : NAV
+
+  return (
+    <div className="flex min-h-svh flex-col [--bottom-nav-h:calc(3.5rem+env(safe-area-inset-bottom,0px))] [--bottom-safe:0px] sm:[--bottom-nav-h:0px]">
+      <header className="sticky top-0 z-30 border-b border-border print:hidden bg-background/90 pt-[env(safe-area-inset-top,0px)] backdrop-blur">
+        <div className="mx-auto flex w-full max-w-6xl items-center justify-between gap-3 px-4 py-3 sm:px-6">
+          <div className="flex min-w-0 items-center gap-3">
+            <span
+              aria-hidden
+              className="flex size-7 shrink-0 items-center justify-center rounded-md bg-primary font-heading text-sm font-semibold text-primary-foreground"
+            >
+              ॐ
+            </span>
+            <div className="flex min-w-0 flex-col">
+              <span className="truncate font-heading text-sm font-medium">
+                {EVENT.name}
+              </span>
+              <span className="truncate text-2xs text-muted-foreground">
+                {formatEventRange()} · {EVENT.venue}
+              </span>
+            </div>
+          </div>
+
+          <div className="flex shrink-0 items-center gap-1 sm:gap-2">
+            <SignedInAs />
+            <a
+              href="/register"
+              target="_blank"
+              rel="noreferrer"
+              aria-label="Open the public registration form"
+              className="inline-flex h-8 items-center gap-1 rounded-md px-2 text-2xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground sm:h-auto sm:py-1"
+            >
+              <span className="hidden sm:inline">Public form</span>
+              <RiExternalLinkLine className="size-4 sm:size-3" />
+            </a>
+            <SignOutButton />
+          </div>
+        </div>
+
+        <nav className="mx-auto hidden w-full max-w-6xl gap-1 px-6 sm:flex">
+          {nav.map(({ to, label, icon: Icon, nested }) => (
+            <NavLink
+              key={to}
+              to={to}
+              end={!nested}
+              className={({ isActive }) =>
+                cn(
+                  "-mb-px flex shrink-0 items-center gap-1.5 border-b-2 border-transparent px-2.5 py-2 text-xs/relaxed text-muted-foreground transition-colors hover:text-foreground",
+                  isActive && "border-primary font-medium text-foreground"
+                )
+              }
+            >
+              <Icon className="size-3.5" />
+              {label}
+            </NavLink>
+          ))}
+        </nav>
+      </header>
+
+      <main className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-5 px-4 pt-5 pb-[calc(var(--bottom-nav-h)+1.5rem)] sm:gap-6 sm:px-6 sm:pt-6">
+        <Outlet />
+      </main>
+
+      <nav
+        aria-label="Main"
+        className="fixed inset-x-0 bottom-0 z-30 grid auto-cols-fr grid-flow-col border-t print:hidden border-border bg-background/95 pb-[env(safe-area-inset-bottom,0px)] backdrop-blur sm:hidden"
+      >
+        {nav.map(({ to, short, icon: Icon, nested }) => (
+          <NavLink
+            key={to}
+            to={to}
+            end={!nested}
+            className={({ isActive }) =>
+              cn(
+                "flex h-14 flex-col items-center justify-center gap-0.5 text-3xs text-muted-foreground transition-colors",
+                isActive && "font-medium text-primary"
+              )
+            }
+          >
+            <Icon className="size-5" />
+            {short}
+          </NavLink>
+        ))}
+      </nav>
+    </div>
+  )
+}
+
+/** Title row shared by every staff screen. */
+export function PageHeader({
+  title,
+  description,
+  actions,
+}: {
+  title: React.ReactNode
+  description?: React.ReactNode
+  actions?: React.ReactNode
+}) {
+  return (
+    <div className="flex flex-wrap items-end justify-between gap-3">
+      <div className="flex min-w-0 flex-col gap-1">
+        <h1 className="font-heading text-lg font-medium text-balance">{title}</h1>
+        {description && (
+          <p className="text-xs/relaxed text-muted-foreground">{description}</p>
+        )}
+      </div>
+      {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
+    </div>
+  )
+}

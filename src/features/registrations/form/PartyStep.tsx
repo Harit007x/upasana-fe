@@ -1,0 +1,177 @@
+import { RiParentLine, RiUserLine } from "@remixicon/react"
+import { Controller, useFieldArray, useFormContext } from "react-hook-form"
+
+import { ChoiceGroup } from "@/components/ui/choice"
+import { Field, Input } from "@/components/ui/input"
+import { NativeSelect } from "@/components/ui/select"
+import { MANDALS, NO_MANDAL, cityOfMandal } from "@/config/event"
+
+import type { RegistrationType } from "../types"
+import { useFormOptions } from "./form-options"
+import { emptyMember, type RegistrationFormValues } from "./schema"
+
+const TYPE_OPTIONS: {
+  value: RegistrationType
+  label: string
+  description: string
+  icon: React.ReactNode
+}[] = [
+  {
+    value: "individual",
+    label: "Individual",
+    description: "Only you.",
+    icon: <RiUserLine />,
+  },
+  {
+    value: "family",
+    label: "Family",
+    description: "You and your family members.",
+    icon: <RiParentLine />,
+  },
+]
+
+/** Step 1: who is registering, and from which mandal. */
+export function PartyStep() {
+  const {
+    control,
+    register,
+    watch,
+    getValues,
+    setValue,
+    formState: { errors },
+  } = useFormContext<RegistrationFormValues>()
+  const { replace, append } = useFieldArray({ control, name: "members" })
+  const [type, stashed] = watch(["type", "stashedMembers"])
+  const { lockedMandal } = useFormOptions()
+
+  /**
+   * Keeps the member list in step with the type. An individual has exactly one
+   * person; a family starts with two cards so it is obvious more can be added.
+   *
+   * Switching a filled-in family to Individual does not delete the others:
+   * they are set aside in `stashedMembers` and come back on switching to
+   * Family again. A tap on the wrong card costs nothing.
+   */
+  const onTypeChange = (next: RegistrationType) => {
+    setValue("type", next)
+    const members = getValues("members")
+    if (next === "individual" && members.length > 1) {
+      setValue("stashedMembers", members.slice(1))
+      replace([members[0]])
+    }
+    if (next === "family") {
+      const kept = getValues("stashedMembers")
+      if (kept.length > 0) {
+        append(kept)
+        setValue("stashedMembers", [])
+      } else if (members.length < 2) {
+        append(emptyMember())
+      }
+    }
+  }
+
+  return (
+    <div className="flex flex-col gap-5">
+      <Field label="Registering as" required>
+        <Controller
+          control={control}
+          name="type"
+          render={({ field }) => (
+            <ChoiceGroup
+              name={field.name}
+              value={field.value}
+              onChange={onTypeChange}
+              options={TYPE_OPTIONS}
+              className="sm:grid-cols-2"
+            />
+          )}
+        />
+      </Field>
+
+      {type !== "individual" && (
+        <Field label="Family name" required error={errors.groupName?.message}>
+          <Input
+            id="groupName"
+            placeholder="Patel family"
+            aria-invalid={!!errors.groupName}
+            {...register("groupName")}
+          />
+        </Field>
+      )}
+
+      {type === "individual" && stashed.length > 0 && (
+        <p className="-mt-2 rounded-md bg-muted px-3 py-2 text-2xs/relaxed text-muted-foreground">
+          {stashed.length === 1
+            ? "1 other person is"
+            : `${stashed.length} other people are`}{" "}
+          kept aside, not deleted. Switch back to Family to bring them back.
+        </p>
+      )}
+
+      <div className="grid gap-4 sm:grid-cols-2">
+        {lockedMandal ? (
+          // A sanchalak registers people from their own mandal only.
+          <Field
+            label="Mandal"
+            required
+            hint="You register people from your own mandal."
+          >
+            <Input
+              id="mandal"
+              value={lockedMandal}
+              readOnly
+              aria-readonly
+              className="bg-muted/50"
+            />
+          </Field>
+        ) : (
+          <Field
+            label="Mandal"
+            required
+            hint="The satsang mandal you attend."
+            error={errors.mandal?.message}
+          >
+            <NativeSelect
+              id="mandal"
+              aria-invalid={!!errors.mandal}
+              {...register("mandal", {
+                // Most people travel from their mandal's city, so pre-fill it
+                // and let them correct it.
+                onChange: (event: React.ChangeEvent<HTMLSelectElement>) => {
+                  const mandal = event.target.value
+                  if (getValues("city") === "" && mandal !== NO_MANDAL) {
+                    setValue("city", cityOfMandal(mandal))
+                  }
+                },
+              })}
+            >
+              <option value="" disabled>
+                Select mandal
+              </option>
+              {MANDALS.map((mandal) => (
+                <option key={mandal} value={mandal}>
+                  {mandal}
+                </option>
+              ))}
+              <option value={NO_MANDAL}>{NO_MANDAL}</option>
+            </NativeSelect>
+          </Field>
+        )}
+
+        <Field
+          label="Travelling from"
+          required
+          hint="City or town."
+          error={errors.city?.message}
+        >
+          <Input
+            id="city"
+            placeholder="Surat"
+            aria-invalid={!!errors.city}
+            {...register("city")}
+          />
+        </Field>
+      </div>
+    </div>
+  )
+}

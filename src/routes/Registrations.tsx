@@ -21,7 +21,11 @@ import {
   TravelModeIcon,
   TypeBadge,
 } from "@/features/registrations/components"
-import { displayName } from "@/features/registrations/format"
+import {
+  displayName,
+  formatIndiaFlight,
+  formatMeal,
+} from "@/features/registrations/format"
 import { SampleDataToggle } from "@/features/registrations/SampleDataToggle"
 import { wantsBed } from "@/features/registrations/stay"
 import { isAdmin, useSession } from "@/lib/auth-client"
@@ -43,7 +47,6 @@ function matches(registration: Registration, query: string) {
   return (
     registration.code.toLowerCase().includes(q) ||
     (registration.groupName ?? "").toLowerCase().includes(q) ||
-    registration.city.toLowerCase().includes(q) ||
     registration.members.some(
       (m) =>
         m.fullName.toLowerCase().includes(q) ||
@@ -62,7 +65,6 @@ function downloadCsv(registrations: Registration[]) {
     "Type",
     "Family name",
     "Mandal",
-    "City",
     "Name",
     "Gender",
     "Age",
@@ -70,12 +72,16 @@ function downloadCsv(registrations: Registration[]) {
     "Relation",
     "Arrival",
     "Arrival time",
+    "Arrival meal",
     "Departure",
     "Departure time",
+    "Departure meal",
     "Travel",
     "Vehicle numbers",
     "Pickup",
     "Drop",
+    "AMD pickup",
+    "AMD drop",
     "Accommodation",
     "Assistance",
     "Number confirmed",
@@ -87,7 +93,6 @@ function downloadCsv(registrations: Registration[]) {
       REGISTRATION_TYPES[r.type],
       r.groupName ?? "",
       r.mandal,
-      r.city,
       m.fullName,
       GENDERS[m.gender],
       m.age,
@@ -95,12 +100,18 @@ function downloadCsv(registrations: Registration[]) {
       m.isPrimary ? "Primary contact" : (m.relation ?? ""),
       m.arrival.date,
       m.arrival.slot,
+      formatMeal(m.arrival),
       m.departure.date,
       m.departure.slot,
+      formatMeal(m.departure),
       TRAVEL_MODES[r.travel.mode],
       (r.travel.vehicleNumbers ?? []).join("; "),
       r.travel.needsPickup ? "Yes" : "",
       r.travel.needsDrop ? "Yes" : "",
+      r.indiaTravel?.arrival ? formatIndiaFlight(r.indiaTravel.arrival) : "",
+      r.indiaTravel?.departure
+        ? formatIndiaFlight(r.indiaTravel.departure)
+        : "",
       wantsBed(r, m) ? "Yes" : "No",
       m.needsAssistance ? (m.assistanceNote ?? "Yes") : "",
       r.mobileVerification === "otp"
@@ -206,16 +217,14 @@ export function Registrations() {
               <RiDownload2Line />
               Export CSV
             </Button>
-            {/* Phones reach this from the tab bar instead. */}
-            <div className="hidden sm:block">
-              <Link
-                to="/registrations/new"
-                className={buttonVariants({ size: "lg" })}
-              >
-                <RiUserAddLine />
-                New registration
-              </Link>
-            </div>
+            {/* The one way in to the form now that it has no tab of its own. */}
+            <Link
+              to="/registrations/new"
+              className={buttonVariants({ size: "lg" })}
+            >
+              <RiUserAddLine />
+              New registration
+            </Link>
           </>
         }
       />
@@ -228,7 +237,7 @@ export function Registrations() {
             type="search"
             value={query}
             onChange={(e) => setParam("q", e.target.value)}
-            placeholder="Search name, mobile, code or city"
+            placeholder="Search name, mobile or code"
             className="pl-10 sm:pl-8"
           />
         </div>

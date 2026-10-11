@@ -9,22 +9,12 @@
 export const EVENT = {
   name: "Youth Convention 2026",
   venue: "Mandir, Ahmedabad",
-  /** The event days, in order: 30 Jan – 1 Feb 2027. ISO dates, no time zone: these are calendar days at the venue. */
-  days: ["2027-01-30", "2027-01-31", "2027-02-01"],
+  /** The event days, in order: 28 Jan – 1 Feb 2027. ISO dates, no time zone: these are calendar days at the venue. */
+  days: ["2027-01-28", "2027-01-29", "2027-01-30", "2027-01-31", "2027-02-01"],
 } as const
 
-/**
- * Days a guest can arrive on or leave on.
- *
- * One day either side of the event, because people travelling from far away
- * arrive the evening before and leave the morning after, and those nights still
- * need a bed.
- */
-export const STAY_DATES = [
-  "2027-01-29",
-  ...EVENT.days,
-  "2027-02-02",
-] as const
+/** Days a guest can arrive on or leave on: the event days only. */
+export const STAY_DATES = EVENT.days
 
 export type StayDate = (typeof STAY_DATES)[number]
 
@@ -36,8 +26,9 @@ export type StayDate = (typeof STAY_DATES)[number]
  * database once staff need to add new ones themselves.
  */
 export const MANDALS = [
-  "Ahmedabad – Maninagar",
-  "Ahmedabad – Naranpura",
+  "Ahmedabad",
+  "Dahegam",
+  "Naroda",
   "Gandhinagar",
   "Surat",
   "Vadodara",
@@ -52,23 +43,55 @@ export const MANDALS = [
   "New Jersey (USA)",
 ] as const
 
-/** "Ahmedabad – Maninagar" → "Ahmedabad", "London (UK)" → "London". */
-export function cityOfMandal(mandal: string) {
-  return mandal.split(" – ")[0].replace(/ \(.*\)$/, "")
-}
-
 /** For guests who come on their own, outside any mandal. */
 export const NO_MANDAL = "Not in a mandal"
+
+/**
+ * Mandals near enough to come and go from home: Ahmedabad, and
+ * these. Their devotees are not asked how they travel or whether they need a
+ * bed — they need neither. Mirrors isLocalMandal on the server.
+ */
+const LOCAL_MANDALS: readonly string[] = [
+  "Dahegam",
+  "Naroda",
+  "Gandhinagar",
+  "Vadodara",
+  "Rajkot",
+]
+export const isLocalMandal = (mandal: string) =>
+  mandal.startsWith("Ahmedabad") || LOCAL_MANDALS.includes(mandal)
+
+/**
+ * Mandals outside India. Their devotees fly in, so the form offers —
+ * optionally — a pickup from and a drop to Ahmedabad airport.
+ */
+export const OVERSEAS_MANDALS: readonly string[] = [
+  "London (UK)",
+  "New Jersey (USA)",
+]
 
 /** Approximate time of day. Planning works in slots; nobody knows their exact train time a month out. */
 export const TIME_SLOTS = {
   morning: "Morning (6 am – 12 pm)",
   afternoon: "Afternoon (12 – 4 pm)",
-  evening: "Evening (4 – 8 pm)",
-  night: "Night (after 8 pm)",
+  evening: "Evening (after 4 pm)",
 } as const
 
 export type TimeSlot = keyof typeof TIME_SLOTS
+
+/**
+ * The meal served in each slot. Someone arriving or leaving in a slot is asked
+ * whether they will take it, so the kitchen knows how many to cook for.
+ */
+export const SLOT_MEALS: Record<TimeSlot, string> = {
+  morning: "breakfast",
+  afternoon: "lunch",
+  evening: "dinner",
+}
+
+/** The meal asked about for a slot, or undefined while no slot is picked. */
+export const mealOf = (slot: string): string | undefined =>
+  SLOT_MEALS[slot as TimeSlot]
 
 const DATE_FORMAT = new Intl.DateTimeFormat("en-IN", {
   day: "numeric",

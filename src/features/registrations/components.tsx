@@ -5,6 +5,7 @@ import {
   RiCheckboxCircleLine,
   RiCheckLine,
   RiFileCopyLine,
+  RiHome4Line,
   RiPlaneLine,
   RiRouteLine,
   RiTrainLine,
@@ -40,6 +41,7 @@ const TRAVEL_ICONS = {
   flight: RiPlaneLine,
   public_bus: RiBus2Line,
   other: RiRouteLine,
+  local: RiHome4Line,
 } satisfies Record<TravelMode, React.ComponentType>
 
 /** The icon for how someone is travelling: a train for train, and so on. */

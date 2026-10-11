@@ -2,28 +2,29 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 
 import { api } from "@/lib/api"
 
-import type { AccommodationData, Allotment, Place, PlaceInput } from "./types"
+import type {
+  AccommodationData,
+  MandalStay,
+  MandalStayInput,
+  Place,
+  PlaceInput,
+} from "./types"
 
 /**
  * Accommodation data from upasana-be, through React Query.
  *
- *   GET    /accommodation                          desk roles; one mandal for a sanchalak
- *   POST   /accommodation/allotments               staff, admin
- *   POST   /accommodation/allotments/release       staff, admin
- *   POST   /accommodation/registrations/:id/notice staff, admin
- *   POST   /accommodation/notices/send-all         staff, admin
- *   POST/PATCH/DELETE /accommodation/places        admin
+ *   GET    /accommodation                              desk roles; one mandal for a sanchalak
+ *   POST/PATCH/DELETE /accommodation/mandal-stays      staff, admin
+ *   PUT    /accommodation/mandal-stays/:id/occupancy   staff, admin, the mandal's sanchalak
+ *   POST/PATCH/DELETE /accommodation/places            admin
  *
- * Everything lives under one query: the screens need places, allotments and
- * notices together, and any change can touch all three.
+ * Everything lives under one query: the screens need places and mandals'
+ * rooms together. (Per-person allotment's hooks are in ./paused/api.ts.)
  */
 
 const key = ["accommodation"] as const
 
-/**
- * Polled: several volunteers allot at once, and a room another one just
- * filled should not keep looking free here.
- */
+/** Polled, so occupancy a coordinator just reported shows up on the admin's screen. */
 export function useAccommodation() {
   return useQuery({
     queryKey: key,
@@ -37,61 +38,11 @@ function useRefresh() {
   return () => queryClient.invalidateQueries({ queryKey: key })
 }
 
-export function useAllot() {
-  const refresh = useRefresh()
-  return useMutation({
-    /** A room for each person, saved together or not at all. */
-    mutationFn: (input: {
-      registrationId: string
-      assignments: { memberId: string; placeId: string; roomId: string }[]
-      /** Let them share a family room another registration has: relatives. */
-      allowSharing?: boolean
-    }) => api.post<Allotment[]>("/accommodation/allotments", input),
-    // Also after a refusal: it usually means someone else just took the bed,
-    // and the picker should show that.
-    onSettled: refresh,
-  })
-}
-
-export function useRelease() {
-  const refresh = useRefresh()
-  return useMutation({
-    mutationFn: (input: { registrationId: string; memberIds: string[] }) =>
-      api.post<Allotment[]>("/accommodation/allotments/release", input),
-    onSettled: refresh,
-  })
-}
-
-export type NoticeResult =
-  | { sent: true; channel: "whatsapp" | "manual" }
-  /** WhatsApp is not set up on the server: send it from your own phone. */
-  | { sent: false; message: string; whatsappUrl: string }
-
-/** Sends one registration its room details; `manual` records one sent by hand. */
-export function useSendNotice() {
-  const refresh = useRefresh()
-  return useMutation({
-    mutationFn: ({ registrationId, manual }: { registrationId: string; manual?: boolean }) =>
-      api.post<NoticeResult>(`/accommodation/registrations/${registrationId}/notice`, {
-        manual: !!manual,
-      }),
-    onSuccess: refresh,
-  })
-}
-
-export function useSendAllNotices() {
-  const refresh = useRefresh()
-  return useMutation({
-    mutationFn: () =>
-      api.post<{ sent: number; failed: string[]; incomplete: number }>(
-        "/accommodation/notices/send-all"
-      ),
-    onSuccess: refresh,
-  })
-}
-
 /** A saved place as the editor sends it back, with its rooms replaced by `rooms`. */
-export function asPlaceInput(place: Place, rooms: PlaceInput["rooms"] = place.rooms): PlaceInput {
+export function asPlaceInput(
+  place: Place,
+  rooms: PlaceInput["rooms"] = place.rooms
+): PlaceInput {
   return {
     name: place.name,
     kind: place.kind,
@@ -120,7 +71,44 @@ export function useSavePlace(id?: string) {
 export function useDeletePlace() {
   const refresh = useRefresh()
   return useMutation({
-    mutationFn: (id: string) => api.delete<{ id: string }>(`/accommodation/places/${id}`),
+    mutationFn: (id: string) =>
+      api.delete<{ id: string }>(`/accommodation/places/${id}`),
     onSuccess: refresh,
+  })
+}
+
+/** Gives a mandal rooms at a place (no `id`), or changes them. */
+export function useSaveMandalStay(id?: string) {
+  const refresh = useRefresh()
+  return useMutation({
+    mutationFn: (input: MandalStayInput) =>
+      id
+        ? api.patch<MandalStay>(`/accommodation/mandal-stays/${id}`, input)
+        : api.post<MandalStay>("/accommodation/mandal-stays", input),
+    // Also after a refusal: it usually means someone else just took a room,
+    // and the picker should show that.
+    onSettled: refresh,
+  })
+}
+
+/** Takes all of a mandal's rooms at a place back. */
+export function useDeleteMandalStay() {
+  const refresh = useRefresh()
+  return useMutation({
+    mutationFn: (id: string) =>
+      api.delete<{ id: string }>(`/accommodation/mandal-stays/${id}`),
+    onSuccess: refresh,
+  })
+}
+
+/** The coordinator's report: people in each of the mandal's rooms. */
+export function useSaveOccupancy(id: string) {
+  const refresh = useRefresh()
+  return useMutation({
+    mutationFn: (rooms: { roomId: string; people: number }[]) =>
+      api.put<MandalStay>(`/accommodation/mandal-stays/${id}/occupancy`, {
+        rooms,
+      }),
+    onSettled: refresh,
   })
 }

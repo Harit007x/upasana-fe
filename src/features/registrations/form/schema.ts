@@ -3,8 +3,13 @@ import { z } from "zod"
 import {
   MANDALS,
   NO_MANDAL,
+  OVERSEAS_MANDALS,
+  isLocalMandal,
   STAY_DATES,
   TIME_SLOTS,
+  EVENT,
+  formatDay,
+  mealOf,
   type StayDate,
   type TimeSlot,
 } from "@/config/event"
@@ -25,6 +30,8 @@ import {
   type NewRegistration,
   type Registration,
   type RegistrationType,
+  type IndiaFlight,
+  type IndiaTravel,
   type StayPoint,
   type TravelMode,
 } from "../types"
@@ -45,6 +52,18 @@ import {
 
 const isIn = (list: readonly string[]) => (value: string) =>
   list.includes(value)
+const MEAL_ANSWERS = ["yes", "no"]
+/** The travel modes the form offers: all but "local", which is set, not picked. */
+export const TRAVEL_CHOICES = (
+  Object.keys(TRAVEL_MODES) as TravelMode[]
+).filter((mode) => mode !== "local")
+
+/** A meal answer as saved: only for a slot with a meal. */
+const mealTaken = (slot: string, answer: string) =>
+  mealOf(slot) && MEAL_ANSWERS.includes(answer) ? answer === "yes" : undefined
+/** A saved meal answer back as the form's "yes", "no" or unanswered. */
+const mealAnswer = (point: StayPoint) =>
+  point.meal === undefined ? "" : point.meal ? "yes" : "no"
 const STAY_DATE_VALUES: readonly string[] = STAY_DATES
 const SLOT_VALUES = Object.keys(TIME_SLOTS)
 
@@ -73,6 +92,8 @@ const memberSchema = z.object({
   arrivalSlot: z.string(),
   departureDate: z.string(),
   departureSlot: z.string(),
+  arrivalMeal: z.string(),
+  departureMeal: z.string(),
   // Asked per person only when the party does not all need a bed. Optional so
   // a draft saved before it existed still loads.
   needsAccommodation: z.boolean().optional(),
@@ -85,7 +106,6 @@ export const registrationFormSchema = z
     mandal: z
       .string()
       .refine(isIn([...MANDALS, NO_MANDAL]), "Select your mandal"),
-    city: z.string().trim().min(2, "Enter the city you are coming from"),
     members: z.array(memberSchema),
     sameSchedule: z.boolean(),
     // The party's dates. Only asked for while everyone travels together —
@@ -94,9 +114,12 @@ export const registrationFormSchema = z
     arrivalSlot: z.string(),
     departureDate: z.string(),
     departureSlot: z.string(),
-    travelMode: z
-      .string()
-      .refine(isIn(Object.keys(TRAVEL_MODES)), "Select how you are travelling"),
+    // "yes" or "no" to the meal served in the arrival or departure slot
+    // (SLOT_MEALS). Only asked when that slot has one; checked in superRefine.
+    arrivalMeal: z.string(),
+    departureMeal: z.string(),
+    // Not asked of local mandals (isLocalMandal): checked in superRefine.
+    travelMode: z.string(),
     vehicleCount: z.string().trim(),
     // One per vehicle, all optional. Longer than the count when the count
     // was lowered: kept so raising it again brings the numbers back, and
@@ -127,10 +150,31 @@ export const registrationFormSchema = z
     // The other people of a family while "Individual" is picked, so switching
     // back brings them back. Never submitted, never validated.
     stashedMembers: z.array(z.custom<z.infer<typeof memberSchema>>(() => true)),
+    // From abroad (see `isOverseas`): a pickup from and a drop to Ahmedabad
+    // airport, both optional. Ticking one asks for its flight: the day
+    // (needed), the time and number (if known). A date is "YYYY-MM-DD" and a
+    // time "HH:MM". Kept but not sent while hidden or unticked.
+    indiaNeedsPickup: z.boolean(),
+    indiaArrivalDate: z.string(),
+    indiaArrivalTime: z.string(),
+    indiaArrivalFlight: z.string(),
+    indiaNeedsDrop: z.boolean(),
+    indiaDepartureDate: z.string(),
+    indiaDepartureTime: z.string(),
+    indiaDepartureFlight: z.string(),
   })
   .superRefine((values, ctx) => {
     const issue = (path: (string | number)[], message: string) =>
       ctx.addIssue({ code: "custom", path, message })
+    // Arriving or leaving in a slot with a meal: "will you take it?" needs an answer.
+    const checkMeal = (
+      path: (string | number)[],
+      slot: string,
+      answer: string
+    ) => {
+      if (mealOf(slot) && !MEAL_ANSWERS.includes(answer))
+        issue(path, "Choose yes or no")
+    }
 
     if (values.type === "family" && values.groupName.length < 2) {
       issue(["groupName"], "Enter a family name, e.g. Patel family")
@@ -244,6 +288,8 @@ export const registrationFormSchema = z
         issue(["departureDate"], "Select the departure day")
       if (!isIn(SLOT_VALUES)(values.departureSlot))
         issue(["departureSlot"], "Select a time")
+      checkMeal(["arrivalMeal"], values.arrivalSlot, values.arrivalMeal)
+      checkMeal(["departureMeal"], values.departureSlot, values.departureMeal)
 
       const arrival = {
         date: values.arrivalDate,
@@ -264,6 +310,16 @@ export const registrationFormSchema = z
     } else {
       values.members.forEach((member, index) => {
         const path = ["members", index]
+        checkMeal(
+          [...path, "arrivalMeal"],
+          member.arrivalSlot,
+          member.arrivalMeal
+        )
+        checkMeal(
+          [...path, "departureMeal"],
+          member.departureSlot,
+          member.departureMeal
+        )
         // Both checked, not one then the other, so every gap shows at once.
         const arrivalPicked =
           isIn(STAY_DATE_VALUES)(member.arrivalDate) &&
@@ -287,6 +343,64 @@ export const registrationFormSchema = z
           issue([...path, "departureDate"], "Departure has to be after arrival")
         }
       })
+    }
+
+    // The airport pickup and drop are asked on step 1, before the event
+    // dates: there a flight only has to fall within reach of the event. Step 3
+    // then keeps the event dates between landing and flying out, on the date
+    // fields shown there.
+    if (isOverseas(values)) {
+      const landing = values.indiaNeedsPickup ? values.indiaArrivalDate : ""
+      const leaving = values.indiaNeedsDrop ? values.indiaDepartureDate : ""
+      const firstDay = EVENT.days[0]
+      const lastDay = EVENT.days[EVENT.days.length - 1]
+      if (values.indiaNeedsPickup && !landing) {
+        issue(["indiaArrivalDate"], "Pick the day you land")
+      }
+      if (values.indiaNeedsDrop && !leaving) {
+        issue(["indiaDepartureDate"], "Pick the day you fly out")
+      }
+      if (landing && landing > lastDay) {
+        issue(
+          ["indiaArrivalDate"],
+          `The event ends on ${formatDay(lastDay)} — land on or before then`
+        )
+      }
+      if (leaving && leaving < firstDay) {
+        issue(
+          ["indiaDepartureDate"],
+          `The event starts on ${formatDay(firstDay)} — fly out on or after then`
+        )
+      } else if (leaving && landing && leaving < landing) {
+        issue(["indiaDepartureDate"], "Has to be after you land")
+      }
+
+      const people = hasSplitDates(values)
+        ? values.members.map((m, i) => ({ ...m, path: ["members", i] }))
+        : [{ ...values, path: [] as (string | number)[] }]
+      for (const person of people) {
+        if (landing && person.arrivalDate && person.arrivalDate < landing) {
+          issue(
+            [...person.path, "arrivalDate"],
+            `You land in India on ${formatDay(landing)} — arrive on or after then`
+          )
+        }
+        if (leaving && person.departureDate && person.departureDate > leaving) {
+          issue(
+            [...person.path, "departureDate"],
+            `Your flight out of India is on ${formatDay(leaving)} — leave on or before then`
+          )
+        }
+      }
+    }
+
+    // Locals are not asked how they travel; everyone else picks one of the
+    // modes on offer ("local" is set for them, never picked).
+    if (
+      !isLocalMandal(values.mandal) &&
+      !isIn(TRAVEL_CHOICES)(values.travelMode)
+    ) {
+      issue(["travelMode"], "Select how you are travelling")
     }
 
     if (values.travelMode === "personal_vehicle") {
@@ -403,6 +517,54 @@ export function isContactVerified(
   if (values.keptMobile && mobile === values.keptMobile) return true
   if (values.verifiedInPerson) return true
   return mobile === values.verifiedMobile && !!values.mobileVerificationToken
+}
+
+/**
+ * Whether the form asks about landing in India: the mandal is abroad. Asked
+ * on the first step, right after the mandal is picked.
+ */
+export function isOverseas(values: Pick<RegistrationFormValues, "mandal">) {
+  return OVERSEAS_MANDALS.includes(values.mandal)
+}
+
+/** A flight as saved: only the parts given. */
+const indiaFlight = (
+  date: string,
+  time: string,
+  flight: string
+): IndiaFlight => ({
+  date,
+  time: orUndefined(time),
+  flight: orUndefined(flight.trim().toUpperCase()),
+})
+
+/**
+ * The airport pickup and drop as saved: only for someone from abroad who
+ * ticked either, with the flight for each one ticked.
+ */
+export function indiaTravelOf(
+  values: RegistrationFormValues
+): IndiaTravel | undefined {
+  const { indiaNeedsPickup: needsPickup, indiaNeedsDrop: needsDrop } = values
+  if (!isOverseas(values) || (!needsPickup && !needsDrop)) return undefined
+  return {
+    needsPickup,
+    needsDrop,
+    arrival: needsPickup
+      ? indiaFlight(
+          values.indiaArrivalDate,
+          values.indiaArrivalTime,
+          values.indiaArrivalFlight
+        )
+      : undefined,
+    departure: needsDrop
+      ? indiaFlight(
+          values.indiaDepartureDate,
+          values.indiaDepartureTime,
+          values.indiaDepartureFlight
+        )
+      : undefined,
+  }
 }
 
 /** Smallest believable age gaps, for the "check the age" hints. */
@@ -544,7 +706,7 @@ export function isSameDayFor(values: DatesValues, index: number) {
 }
 
 type AccommodationValues = DatesValues &
-  Pick<RegistrationFormValues, "accommodationRequired">
+  Pick<RegistrationFormValues, "accommodationRequired" | "mandal">
 
 /**
  * Whether the form asks for "everyone" at once. `accommodationRequired` is
@@ -559,6 +721,8 @@ export const accommodationPerPerson = (values: AccommodationValues) =>
  * someone with no night here.
  */
 export function bedsWanted(values: AccommodationValues) {
+  // Locals go home at night: they are not asked, and get no bed.
+  if (isLocalMandal(values.mandal)) return values.members.map(() => false)
   const perPerson = accommodationPerPerson(values)
   return values.members.map(
     (member, index) =>
@@ -575,13 +739,15 @@ export function needsAccommodation(values: AccommodationValues) {
 
 /** The fields each step owns, so Continue validates only what is on screen. */
 export const STEP_FIELDS = [
-  ["type", "groupName", "mandal", "city"],
+  ["type", "groupName", "mandal", "indiaArrivalDate", "indiaDepartureDate"],
   ["members"],
   [
     "arrivalDate",
     "arrivalSlot",
     "departureDate",
     "departureSlot",
+    "arrivalMeal",
+    "departureMeal",
     "members",
     "travelMode",
     "vehicleCount",
@@ -604,6 +770,8 @@ export function emptyMember(): MemberFormValues {
     arrivalSlot: "",
     departureDate: "",
     departureSlot: "",
+    arrivalMeal: "",
+    departureMeal: "",
     needsAccommodation: false,
   }
 }
@@ -612,13 +780,14 @@ export const DEFAULT_VALUES: RegistrationFormValues = {
   type: "individual",
   groupName: "",
   mandal: "",
-  city: "",
   members: [emptyMember()],
   sameSchedule: true,
   arrivalDate: "",
   arrivalSlot: "",
   departureDate: "",
   departureSlot: "",
+  arrivalMeal: "",
+  departureMeal: "",
   travelMode: "",
   vehicleCount: "1",
   vehicleNumbers: [""],
@@ -635,6 +804,14 @@ export const DEFAULT_VALUES: RegistrationFormValues = {
   takenMobile: "",
   takenCode: "",
   stashedMembers: [],
+  indiaNeedsPickup: false,
+  indiaArrivalDate: "",
+  indiaArrivalTime: "",
+  indiaArrivalFlight: "",
+  indiaNeedsDrop: false,
+  indiaDepartureDate: "",
+  indiaDepartureTime: "",
+  indiaDepartureFlight: "",
 }
 
 const orUndefined = (value: string) => (value === "" ? undefined : value)
@@ -647,12 +824,17 @@ export function toNewRegistration(
   const arrival: StayPoint = {
     date: values.arrivalDate as StayDate,
     slot: values.arrivalSlot as TimeSlot,
+    meal: mealTaken(values.arrivalSlot, values.arrivalMeal),
   }
   const departure: StayPoint = {
     date: values.departureDate as StayDate,
     slot: values.departureSlot as TimeSlot,
+    meal: mealTaken(values.departureSlot, values.departureMeal),
   }
-  const mode = values.travelMode as TravelMode
+  // Locals are not asked: they travel from home.
+  const mode: TravelMode = isLocalMandal(values.mandal)
+    ? "local"
+    : (values.travelMode as TravelMode)
   const split = hasSplitDates(values)
   const type: RegistrationType = values.type
 
@@ -680,12 +862,14 @@ export function toNewRegistration(
       : {
           date: member.arrivalDate as StayDate,
           slot: member.arrivalSlot as TimeSlot,
+          meal: mealTaken(member.arrivalSlot, member.arrivalMeal),
         },
     departure: !split
       ? departure
       : {
           date: member.departureDate as StayDate,
           slot: member.departureSlot as TimeSlot,
+          meal: mealTaken(member.departureSlot, member.departureMeal),
         },
   }))
 
@@ -705,7 +889,6 @@ export function toNewRegistration(
     type,
     groupName: type === "individual" ? undefined : values.groupName,
     mandal: values.mandal,
-    city: values.city,
     members,
     arrival: bookingArrival,
     departure: bookingDeparture,
@@ -722,7 +905,7 @@ export function toNewRegistration(
               .filter(Boolean)
           : undefined,
       reference:
-        mode === "personal_vehicle"
+        mode === "personal_vehicle" || mode === "local"
           ? undefined
           : orUndefined(values.travelReference),
       needsPickup:
@@ -730,6 +913,7 @@ export function toNewRegistration(
       needsDrop: (mode === "train" || mode === "flight") && values.needsDrop,
     },
     accommodationRequired: beds.some(Boolean),
+    indiaTravel: indiaTravelOf(values),
     notes: orUndefined(values.notes),
     source,
     // How the contact's number is vouched for. Nothing when an edit keeps it.
@@ -769,6 +953,8 @@ export function fromRegistration(
       arrivalSlot: split ? member.arrival.slot : "",
       departureDate: split ? member.departure.date : "",
       departureSlot: split ? member.departure.slot : "",
+      arrivalMeal: split ? mealAnswer(member.arrival) : "",
+      departureMeal: split ? mealAnswer(member.departure) : "",
       needsAccommodation: wantsBed(registration, member),
     }
   })
@@ -785,13 +971,14 @@ export function fromRegistration(
     type: registration.type,
     groupName: registration.groupName ?? "",
     mandal: registration.mandal,
-    city: registration.city,
     members,
     sameSchedule: !split,
     arrivalDate: registration.arrival.date,
     arrivalSlot: registration.arrival.slot,
     departureDate: registration.departure.date,
     departureSlot: registration.departure.slot,
+    arrivalMeal: mealAnswer(registration.arrival),
+    departureMeal: mealAnswer(registration.departure),
     travelMode: registration.travel.mode,
     vehicleCount: String(count),
     vehicleNumbers: [
@@ -802,7 +989,22 @@ export function fromRegistration(
     needsPickup: registration.travel.needsPickup,
     needsDrop: registration.travel.needsDrop ?? false,
     accommodationRequired: registration.accommodationRequired && everyone,
+    ...fromIndiaTravel(registration.indiaTravel),
     notes: registration.notes ?? "",
     keptMobile: registration.members[0]?.mobile ?? "",
+  }
+}
+
+/** A saved airport pickup and drop back as form values. */
+function fromIndiaTravel(india?: IndiaTravel) {
+  return {
+    indiaNeedsPickup: india?.needsPickup ?? false,
+    indiaArrivalDate: india?.arrival?.date ?? "",
+    indiaArrivalTime: india?.arrival?.time ?? "",
+    indiaArrivalFlight: india?.arrival?.flight ?? "",
+    indiaNeedsDrop: india?.needsDrop ?? false,
+    indiaDepartureDate: india?.departure?.date ?? "",
+    indiaDepartureTime: india?.departure?.time ?? "",
+    indiaDepartureFlight: india?.departure?.flight ?? "",
   }
 }

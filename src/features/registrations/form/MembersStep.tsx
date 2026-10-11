@@ -98,6 +98,8 @@ export function MembersStep() {
       arrivalSlot: first?.arrivalSlot ?? "",
       departureDate: first?.departureDate ?? "",
       departureSlot: first?.departureSlot ?? "",
+      arrivalMeal: first?.arrivalMeal ?? "",
+      departureMeal: first?.departureMeal ?? "",
     })
   }
 

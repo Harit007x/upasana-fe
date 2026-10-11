@@ -9,7 +9,7 @@ import {
 } from "@remixicon/react"
 import { cn } from "cn"
 import * as React from "react"
-import { FormProvider, useForm } from "react-hook-form"
+import { FormProvider, useForm, useWatch } from "react-hook-form"
 import { useSearchParams } from "react-router"
 
 import { Button } from "@/components/ui/button"
@@ -19,9 +19,8 @@ import {
   DialogFooter,
   DialogHeader,
 } from "@/components/ui/dialog"
+import { isLocalMandal } from "@/config/event"
 import { ApiError } from "@/lib/api"
-
-import { cityOfMandal } from "@/config/event"
 
 import {
   useCreateRegistration,
@@ -118,11 +117,7 @@ export function RegistrationForm({
     editing
       ? fromRegistration(editing.registration)
       : lockedMandal
-        ? {
-            ...DEFAULT_VALUES,
-            mandal: lockedMandal,
-            city: cityOfMandal(lockedMandal),
-          }
+        ? { ...DEFAULT_VALUES, mandal: lockedMandal }
         : DEFAULT_VALUES
   )
   // Whatever was entered before a refresh, read once on mount. See draft.ts.
@@ -273,7 +268,10 @@ export function RegistrationForm({
           const contact = contactMobile(values)
           if (contact) {
             form.setValue("takenMobile", contact)
-            form.setValue("takenCode", error.message.match(/YC-\d+/)?.[0] ?? "another registration")
+            form.setValue(
+              "takenCode",
+              error.message.match(/YC-\d+/)?.[0] ?? "another registration"
+            )
           }
           markAttempted(1)
           goTo(1)
@@ -306,6 +304,12 @@ export function RegistrationForm({
   }
 
   const isLast = step === STEPS.length - 1
+  // A nearby mandal is not asked about travel or stay: step 3 is just dates.
+  const local = isLocalMandal(
+    useWatch({ control: form.control, name: "mandal" })
+  )
+  const titleOf = (index: number) =>
+    index === 2 && local ? "Dates" : STEPS[index].title
 
   const editingText = mode !== "new"
 
@@ -356,7 +360,7 @@ export function RegistrationForm({
                       {done && (
                         <RiCheckLine className="size-3 shrink-0 text-primary" />
                       )}
-                      {item.title}
+                      {titleOf(index)}
                     </span>
                   </button>
                 </li>
@@ -366,7 +370,7 @@ export function RegistrationForm({
 
           <div className="flex items-start justify-between gap-3">
             <h2 className="flex min-w-0 flex-wrap items-baseline gap-x-2 font-heading text-base font-medium">
-              {STEPS[step].title}
+              {titleOf(step)}
               <span className="font-mono text-xs font-normal text-muted-foreground tabular-nums">
                 Step {step + 1} of {STEPS.length}
               </span>
@@ -475,7 +479,7 @@ export function RegistrationForm({
             bar when there is one, so Continue is always under the thumb
             instead of below a family's worth of fields.
           */}
-            <div className="sticky bottom-(--bottom-nav-h) z-20 -mx-4 flex items-center justify-between gap-2 border-t border-border bg-background/95 px-4 pt-3 pb-[calc(0.75rem+var(--bottom-safe))] backdrop-blur sm:static sm:mx-0 sm:bg-transparent sm:px-0 sm:pt-4 sm:pb-0 sm:backdrop-blur-none">
+            <div className="sticky bottom-(--bottom-nav-h) z-20 -mx-4 flex items-center justify-between gap-2 border-t border-border bg-background/95 px-4 pt-2 pb-[calc(0.5rem+var(--bottom-safe))] backdrop-blur sm:static sm:mx-0 sm:bg-transparent sm:px-0 sm:pt-4 sm:pb-0 sm:backdrop-blur-none">
               <Button
                 type="button"
                 variant="ghost"

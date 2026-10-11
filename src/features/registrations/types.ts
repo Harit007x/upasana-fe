@@ -1,5 +1,5 @@
 import type { StayDate, TimeSlot } from "@/config/event"
-import type { StayNotice } from "@/features/accommodation/types"
+import type { StayNotice } from "@/features/accommodation/paused/types"
 
 /**
  * The registration record, shaped the way the backend will store it.
@@ -26,6 +26,8 @@ export const TRAVEL_MODES = {
   flight: "Flight",
   public_bus: "Public bus / ST",
   other: "Other",
+  /** Set for local mandals (isLocalMandal), who are not asked. Never offered. */
+  local: "Local",
 } as const
 export type TravelMode = keyof typeof TRAVEL_MODES
 
@@ -70,7 +72,16 @@ export const RELATION_GENDER: Partial<
   Grandmother: "female",
 }
 
-export type StayPoint = { date: StayDate; slot: TimeSlot }
+export type StayPoint = {
+  date: StayDate
+  slot: TimeSlot
+  /**
+   * Whether they take the meal served in that slot (SLOT_MEALS): on arrival,
+   * the first meal here; on leaving, the last one before going. Missing on
+   * registrations from before it was asked.
+   */
+  meal?: boolean
+}
 
 export type Member = {
   id: string
@@ -110,6 +121,29 @@ export type Travel = {
   needsDrop?: boolean
 }
 
+/** A flight into or out of Ahmedabad airport. */
+export type IndiaFlight = {
+  /** ISO calendar day, e.g. "2027-01-24". */
+  date: string
+  /** 24-hour local time, e.g. "06:30", when known. */
+  time?: string
+  flight?: string
+}
+
+/**
+ * For devotees from abroad: a pickup from and a drop to Ahmedabad airport,
+ * the only one the transport team covers. Asked on the first step when the
+ * mandal is overseas; both optional.
+ */
+export type IndiaTravel = {
+  needsPickup: boolean
+  /** The flight they land on; with `needsPickup`. */
+  arrival?: IndiaFlight
+  needsDrop: boolean
+  /** The flight they leave on; with `needsDrop`. */
+  departure?: IndiaFlight
+}
+
 export type Registration = {
   id: string
   /** Human-facing code printed on the confirmation, e.g. YC-0142. */
@@ -118,7 +152,6 @@ export type Registration = {
   /** "Patel family" or "Surat yuvak mandal". Empty for individuals. */
   groupName?: string
   mandal: string
-  city: string
   members: Member[]
   /**
    * The booking-level dates. Each member also carries their own, which equal
@@ -127,6 +160,8 @@ export type Registration = {
   arrival: StayPoint
   departure: StayPoint
   travel: Travel
+  /** Only for devotees from abroad who filled it in. */
+  indiaTravel?: IndiaTravel
   accommodationRequired: boolean
   notes?: string
   status: RegistrationStatus
@@ -145,7 +180,8 @@ export type Registration = {
   /**
    * Only on a devotee's own registrations (`/registrations/mine`): the room
    * details they were sent, while still right — or `stayChanging` when the
-   * rooms changed since and new details are coming.
+   * rooms changed since and new details are coming. PAUSED 2026-10-11 with
+   * per-person allotment: the server no longer sends them.
    */
   stay?: StayNotice
   stayChanging?: boolean

@@ -4,11 +4,12 @@ import { Controller, useFieldArray, useFormContext } from "react-hook-form"
 import { ChoiceGroup } from "@/components/ui/choice"
 import { Field, Input } from "@/components/ui/input"
 import { NativeSelect } from "@/components/ui/select"
-import { MANDALS, NO_MANDAL, cityOfMandal } from "@/config/event"
+import { MANDALS, NO_MANDAL } from "@/config/event"
 
 import type { RegistrationType } from "../types"
 import { useFormOptions } from "./form-options"
-import { emptyMember, type RegistrationFormValues } from "./schema"
+import { IndiaTravelSection } from "./IndiaTravelSection"
+import { emptyMember, isOverseas, type RegistrationFormValues } from "./schema"
 
 const TYPE_OPTIONS: {
   value: RegistrationType
@@ -41,7 +42,7 @@ export function PartyStep() {
     formState: { errors },
   } = useFormContext<RegistrationFormValues>()
   const { replace, append } = useFieldArray({ control, name: "members" })
-  const [type, stashed] = watch(["type", "stashedMembers"])
+  const [type, stashed, mandal] = watch(["type", "stashedMembers", "mandal"])
   const { lockedMandal } = useFormOptions()
 
   /**
@@ -112,7 +113,7 @@ export function PartyStep() {
         {lockedMandal ? (
           // A sanchalak registers people from their own mandal only.
           <Field
-            label="Mandal"
+            label="Mandal / Travelling from"
             required
             hint="You register people from your own mandal."
           >
@@ -126,24 +127,15 @@ export function PartyStep() {
           </Field>
         ) : (
           <Field
-            label="Mandal"
+            label="Mandal / Travelling from"
             required
-            hint="The satsang mandal you attend."
+            hint="Your satsang mandal, or the place you are travelling from."
             error={errors.mandal?.message}
           >
             <NativeSelect
               id="mandal"
               aria-invalid={!!errors.mandal}
-              {...register("mandal", {
-                // Most people travel from their mandal's city, so pre-fill it
-                // and let them correct it.
-                onChange: (event: React.ChangeEvent<HTMLSelectElement>) => {
-                  const mandal = event.target.value
-                  if (getValues("city") === "" && mandal !== NO_MANDAL) {
-                    setValue("city", cityOfMandal(mandal))
-                  }
-                },
-              })}
+              {...register("mandal")}
             >
               <option value="" disabled>
                 Select mandal
@@ -157,21 +149,14 @@ export function PartyStep() {
             </NativeSelect>
           </Field>
         )}
-
-        <Field
-          label="Travelling from"
-          required
-          hint="City or town."
-          error={errors.city?.message}
-        >
-          <Input
-            id="city"
-            placeholder="Surat"
-            aria-invalid={!!errors.city}
-            {...register("city")}
-          />
-        </Field>
       </div>
+
+      {/* From abroad: when they land in and leave India, asked right away. */}
+      {isOverseas({ mandal }) && (
+        <IndiaTravelSection
+          weNeed={type === "individual" ? "I need" : "We need"}
+        />
+      )}
     </div>
   )
 }

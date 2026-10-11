@@ -3,7 +3,7 @@ import { useFormContext } from "react-hook-form"
 import { Checkbox } from "@/components/ui/choice"
 import { Badge } from "@/components/ui/primitives"
 import { Field, RequiredMark, Textarea } from "@/components/ui/input"
-import { TIME_SLOTS, formatStayDate, type TimeSlot } from "@/config/event"
+import { isLocalMandal, type StayDate, type TimeSlot } from "@/config/event"
 import { formatMobile, toE164 } from "@/lib/phone"
 
 import {
@@ -13,8 +13,10 @@ import {
   type Gender,
   type TravelMode,
 } from "../types"
+import { formatIndiaFlight, formatStay } from "../format"
 import {
   hasSplitDates,
+  indiaTravelOf,
   bedsWanted,
   needsAccommodation,
   vehicleSlots,
@@ -36,9 +38,13 @@ function Row({
   )
 }
 
-const stayText = (date: string, slot: string) =>
+const stayText = (date: string, slot: string, meal: string) =>
   date && slot
-    ? `${formatStayDate(date)}, ${TIME_SLOTS[slot as TimeSlot].split(" (")[0].toLowerCase()}`
+    ? formatStay({
+        date: date as StayDate,
+        slot: slot as TimeSlot,
+        meal: meal === "" ? undefined : meal === "yes",
+      })
     : "—"
 
 /** Step 4: everything on one screen before it is sent. */
@@ -55,6 +61,7 @@ export function ReviewStep({
   const values = getValues()
   const beds = bedsWanted(values)
   const mode = values.travelMode as TravelMode
+  const india = indiaTravelOf(values)
 
   const editButton = (step: number) => (
     <button
@@ -78,8 +85,13 @@ export function ReviewStep({
           {values.type !== "individual" && (
             <Row label="Name">{values.groupName}</Row>
           )}
-          <Row label="Mandal">{values.mandal}</Row>
-          <Row label="From">{values.city}</Row>
+          <Row label="Mandal / Travelling from">{values.mandal}</Row>
+          {india?.arrival && (
+            <Row label="Airport pickup">{formatIndiaFlight(india.arrival)}</Row>
+          )}
+          {india?.departure && (
+            <Row label="Airport drop">{formatIndiaFlight(india.departure)}</Row>
+          )}
         </dl>
       </section>
 
@@ -127,75 +139,102 @@ export function ReviewStep({
 
       <section className="flex flex-col">
         <div className="flex items-center justify-between">
-          <h3 className="font-heading text-sm font-medium">Stay and travel</h3>
+          <h3 className="font-heading text-sm font-medium">
+            {isLocalMandal(values.mandal) ? "Dates" : "Stay and travel"}
+          </h3>
           {editButton(2)}
         </div>
         <dl className="divide-y divide-border">
           {!hasSplitDates(values) ? (
             <>
               <Row label="Arriving">
-                {stayText(values.arrivalDate, values.arrivalSlot)}
+                {stayText(
+                  values.arrivalDate,
+                  values.arrivalSlot,
+                  values.arrivalMeal
+                )}
               </Row>
               <Row label="Leaving">
-                {stayText(values.departureDate, values.departureSlot)}
+                {stayText(
+                  values.departureDate,
+                  values.departureSlot,
+                  values.departureMeal
+                )}
               </Row>
             </>
           ) : (
             values.members.map((member, index) => (
               <Row key={index} label={member.fullName}>
-                {stayText(member.arrivalDate, member.arrivalSlot)} →{" "}
-                {stayText(member.departureDate, member.departureSlot)}
+                {stayText(
+                  member.arrivalDate,
+                  member.arrivalSlot,
+                  member.arrivalMeal
+                )}{" "}
+                →{" "}
+                {stayText(
+                  member.departureDate,
+                  member.departureSlot,
+                  member.departureMeal
+                )}
               </Row>
             ))
           )}
-          <Row label="Travel">
-            {TRAVEL_MODES[mode]}
-            {mode === "personal_vehicle" &&
-              (() => {
-                const count = vehicleSlots(values)
-                const numbers = values.vehicleNumbers
-                  .slice(0, count)
-                  .map((number) => (number ?? "").trim().toUpperCase())
-                  .filter(Boolean)
-                return ` · ${count} ${count === 1 ? "vehicle" : "vehicles"}${numbers.length ? ` · ${numbers.join(", ")}` : ""}`
-              })()}
-            {mode !== "personal_vehicle" &&
-              values.travelReference &&
-              ` · ${values.travelReference}`}
-            {(mode === "train" || mode === "flight") && values.needsPickup && (
-              <Badge variant="info" className="ml-2 align-middle">
-                Pickup needed
-              </Badge>
-            )}
-            {(mode === "train" || mode === "flight") && values.needsDrop && (
-              <Badge variant="info" className="ml-2 align-middle">
-                Drop needed
-              </Badge>
-            )}
-          </Row>
-          <Row label="Accommodation">
-            {needsAccommodation(values) ? (
-              <>
-                <Badge variant="info" className="align-middle">
-                  Needed
-                </Badge>
-                {/* Only some of the party: say who. */}
-                {beds.includes(false) && (
-                  <span className="ml-2">
-                    for{" "}
-                    {values.members
-                      .map((m, i) =>
-                        beds[i] ? m.fullName || `Person ${i + 1}` : ""
-                      )
+          {isLocalMandal(values.mandal) ? (
+            <Row label="Travel and stay">Local — not needed</Row>
+          ) : (
+            <>
+              <Row label="Travel">
+                {TRAVEL_MODES[mode]}
+                {mode === "personal_vehicle" &&
+                  (() => {
+                    const count = vehicleSlots(values)
+                    const numbers = values.vehicleNumbers
+                      .slice(0, count)
+                      .map((number) => (number ?? "").trim().toUpperCase())
                       .filter(Boolean)
-                      .join(", ")}
-                  </span>
+                    return ` · ${count} ${count === 1 ? "vehicle" : "vehicles"}${numbers.length ? ` · ${numbers.join(", ")}` : ""}`
+                  })()}
+                {mode !== "personal_vehicle" &&
+                  values.travelReference &&
+                  ` · ${values.travelReference}`}
+                {(mode === "train" || mode === "flight") &&
+                  values.needsPickup && (
+                    <Badge variant="info" className="ml-2 align-middle">
+                      Pickup needed
+                    </Badge>
+                  )}
+                {(mode === "train" || mode === "flight") &&
+                  values.needsDrop && (
+                    <Badge variant="info" className="ml-2 align-middle">
+                      Drop needed
+                    </Badge>
+                  )}
+              </Row>
+              <Row label="Accommodation">
+                {needsAccommodation(values) ? (
+                  <>
+                    <Badge variant="info" className="align-middle">
+                      Needed
+                    </Badge>
+                    {/* Only some of the party: say who. */}
+                    {beds.includes(false) && (
+                      <span className="ml-2">
+                        for{" "}
+                        {values.members
+                          .map((m, i) =>
+                            beds[i] ? m.fullName || `Person ${i + 1}` : ""
+                          )
+                          .filter(Boolean)
+                          .join(", ")}
+                      </span>
+                    )}
+                  </>
+                ) : (
+                  "Not needed"
                 )}
-              </>
-            ) : (
-              "Not needed"
-            )}
-          </Row>
+              </Row>
+            </>
+          )}
         </dl>
       </section>
 

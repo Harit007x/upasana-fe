@@ -3,15 +3,17 @@ import {
   RiDashboardLine,
   RiExternalLinkLine,
   RiFileList3Line,
+  RiGroupLine,
+  RiHistoryLine,
   RiHotelBedLine,
   RiLogoutBoxRLine,
+  RiMenuLine,
   RiShieldUserLine,
-  RiUserAddLine,
 } from "@remixicon/react"
 import { useQueryClient } from "@tanstack/react-query"
 import { cn } from "cn"
 import * as React from "react"
-import { NavLink, Outlet, useNavigate } from "react-router"
+import { NavLink, Outlet, useLocation, useNavigate } from "react-router"
 
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/primitives"
@@ -28,24 +30,35 @@ type NavItem = {
 }
 
 const NAV: NavItem[] = [
-  { to: "/", label: "Overview", short: "Overview", icon: RiDashboardLine },
+  { to: "/", label: "Overview", short: "Home", icon: RiDashboardLine },
   {
     to: "/registrations",
     label: "Registrations",
-    short: "Registrations",
+    short: "Devotees",
     icon: RiFileList3Line,
-  },
-  {
-    to: "/registrations/new",
-    label: "New registration",
-    short: "Register",
-    icon: RiUserAddLine,
+    // Also lit on a registration and on the new-registration form, which is
+    // reached from this screen's "New registration" button.
+    nested: true,
   },
   {
     to: "/accommodation",
     label: "Accommodation",
     short: "Stay",
     icon: RiHotelBedLine,
+    nested: true,
+  },
+]
+
+/**
+ * Desk screens past the three everyday ones: tabs from `sm` up, behind "More"
+ * on a phone.
+ */
+const EXTRA_NAV: NavItem[] = [
+  {
+    to: "/guests",
+    label: "Guests",
+    short: "Guests",
+    icon: RiGroupLine,
     nested: true,
   },
 ]
@@ -57,6 +70,7 @@ const ADMIN_NAV: NavItem[] = [
     short: "Schedule",
     icon: RiCalendarScheduleLine,
   },
+  { to: "/admin/logs", label: "Logs", short: "Logs", icon: RiHistoryLine },
   { to: "/admin", label: "Team", short: "Team", icon: RiShieldUserLine },
 ]
 
@@ -111,6 +125,128 @@ function SignedInAs() {
   )
 }
 
+const tabClass = (active: boolean) =>
+  cn(
+    "flex h-14 min-w-0 flex-col items-center justify-center gap-0.5 px-0.5 text-3xs text-muted-foreground transition-colors",
+    active && "font-medium text-primary"
+  )
+
+/**
+ * The phone tab bar. Five slots at most: at 375px and in this monospace font,
+ * a sixth label no longer fits. The four everyday screens are always tabs;
+ * anything beyond (Guests, the admin screens) goes behind "More", a sheet
+ * that opens above the bar.
+ */
+function PhoneNav({ main, more }: { main: NavItem[]; more: NavItem[] }) {
+  const { pathname } = useLocation()
+  // Open only on the page it was opened on, so following a link in it, or
+  // any other navigation, closes it without an effect.
+  const [openOn, setOpenOn] = React.useState<string | null>(null)
+  const open = openOn === pathname
+  const setOpen = (next: boolean) => setOpenOn(next ? pathname : null)
+  const inMore = more.some(
+    ({ to }) => pathname === to || pathname.startsWith(`${to}/`)
+  )
+
+  // Escape closes it too.
+  React.useEffect(() => {
+    if (!open) return
+    const onKey = (event: KeyboardEvent) =>
+      event.key === "Escape" && setOpenOn(null)
+    window.addEventListener("keydown", onKey)
+    return () => window.removeEventListener("keydown", onKey)
+  }, [open])
+
+  return (
+    <>
+      {open && (
+        <div className="fixed inset-0 z-30 sm:hidden print:hidden">
+          <div
+            aria-hidden
+            onClick={() => setOpen(false)}
+            className="absolute inset-0 bg-background/60 backdrop-blur-[2px]"
+          />
+          <div
+            id="more-menu"
+            className="absolute inset-x-0 bottom-(--bottom-nav-h) rounded-t-xl border-t border-border bg-background p-2 shadow-lg"
+          >
+            <ul className="flex flex-col">
+              {more.map(({ to, label, icon: Icon, nested }) => (
+                <li key={to}>
+                  <NavLink
+                    to={to}
+                    end={!nested}
+                    className={({ isActive }) =>
+                      cn(
+                        "flex h-12 items-center gap-3 rounded-md px-3 text-xs text-foreground hover:bg-muted",
+                        isActive && "bg-primary/10 font-medium text-primary"
+                      )
+                    }
+                  >
+                    <Icon className="size-5" />
+                    {label}
+                  </NavLink>
+                </li>
+              ))}
+              <li className="mt-1 border-t border-border pt-1">
+                <a
+                  href="/schedule"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="flex h-12 items-center gap-3 rounded-md px-3 text-xs text-muted-foreground hover:bg-muted"
+                >
+                  <RiExternalLinkLine className="size-5" />
+                  Public schedule
+                </a>
+              </li>
+              <li>
+                <a
+                  href="/guests/register"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="flex h-12 items-center gap-3 rounded-md px-3 text-xs text-muted-foreground hover:bg-muted"
+                >
+                  <RiExternalLinkLine className="size-5" />
+                  Guest form
+                </a>
+              </li>
+            </ul>
+          </div>
+        </div>
+      )}
+
+      <nav
+        aria-label="Main"
+        className="fixed inset-x-0 bottom-0 z-40 grid auto-cols-fr grid-flow-col border-t border-border bg-background/95 pb-[env(safe-area-inset-bottom,0px)] backdrop-blur sm:hidden print:hidden"
+      >
+        {main.map(({ to, short, icon: Icon, nested }) => (
+          <NavLink
+            key={to}
+            to={to}
+            end={!nested}
+            className={({ isActive }) => tabClass(isActive && !open)}
+          >
+            <Icon className="size-5 shrink-0" />
+            <span className="max-w-full truncate">{short}</span>
+          </NavLink>
+        ))}
+        {more.length > 0 && (
+          <button
+            type="button"
+            aria-expanded={open}
+            aria-controls="more-menu"
+            onClick={() => setOpen(!open)}
+            className={tabClass(open || inMore)}
+          >
+            <RiMenuLine className="size-5 shrink-0" />
+            <span className="max-w-full truncate">More</span>
+          </button>
+        )}
+      </nav>
+    </>
+  )
+}
+
 /**
  * The staff side: event name on top, navigation, and the current screen below.
  *
@@ -121,7 +257,10 @@ function SignedInAs() {
  */
 export function AppShell() {
   const { data: session } = useSession()
-  const nav = isAdmin(session?.user.role) ? [...NAV, ...ADMIN_NAV] : NAV
+  const more = isAdmin(session?.user.role)
+    ? [...EXTRA_NAV, ...ADMIN_NAV]
+    : EXTRA_NAV
+  const nav = [...NAV, ...more]
 
   // The header's height as --app-header-h, for anything that sticks just
   // below it (BackLink). Measured, since it is taller from `sm` up where the
@@ -208,27 +347,7 @@ export function AppShell() {
         <Outlet />
       </main>
 
-      <nav
-        aria-label="Main"
-        className="fixed inset-x-0 bottom-0 z-30 grid auto-cols-fr grid-flow-col border-t border-border bg-background/95 pb-[env(safe-area-inset-bottom,0px)] backdrop-blur sm:hidden print:hidden"
-      >
-        {nav.map(({ to, short, icon: Icon, nested }) => (
-          <NavLink
-            key={to}
-            to={to}
-            end={!nested}
-            className={({ isActive }) =>
-              cn(
-                "flex h-14 flex-col items-center justify-center gap-0.5 text-3xs text-muted-foreground transition-colors",
-                isActive && "font-medium text-primary"
-              )
-            }
-          >
-            <Icon className="size-5" />
-            {short}
-          </NavLink>
-        ))}
-      </nav>
+      <PhoneNav main={NAV} more={more} />
     </div>
   )
 }

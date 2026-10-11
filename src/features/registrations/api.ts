@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 
+import { changeKeys } from "@/features/logs/api"
 import { ApiError, api } from "@/lib/api"
 
 import type {
@@ -163,7 +164,7 @@ export function useRegistrationLookup(
   })
 }
 
-/** A team member editing a registration at the desk. Status is kept. */
+/** A team member editing a registration at the desk. Status is kept; the change is logged. */
 export function useUpdateRegistration(id: string) {
   const queryClient = useQueryClient()
   return useMutation({
@@ -173,6 +174,7 @@ export function useUpdateRegistration(id: string) {
       queryClient.setQueryData(keys.detail(updated.id), updated)
       return Promise.all([
         queryClient.invalidateQueries({ queryKey: keys.all, exact: true }),
+        queryClient.invalidateQueries({ queryKey: changeKeys.all }),
         // Removing someone, or unticking their bed, frees it.
         queryClient.invalidateQueries({ queryKey: ACCOMMODATION }),
       ])
@@ -191,7 +193,7 @@ export function useMyRegistrations(
   })
 }
 
-/** A devotee saving changes to their own registration; spends the OTP token. */
+/** A devotee saving changes to their own registration; spends the OTP token. Status is kept; the change is logged. */
 export function useUpdateOwnRegistration(id: string) {
   return useMutation({
     mutationFn: (input: NewRegistration) =>

@@ -22,11 +22,13 @@ import {
 } from "@/components/ui/primitives"
 import { EVENT } from "@/config/event"
 import { useAccommodation } from "@/features/accommodation/api"
-import { RegistrationStay } from "@/features/accommodation/RegistrationStay"
-import { indexAccommodation } from "@/features/accommodation/rules"
+import { Contact } from "@/features/accommodation/components"
+import type { AccommodationData } from "@/features/accommodation/types"
+// PAUSED 2026-10-11 — per-person room allotment (rooms now go to mandals).
+// import { RegistrationStay } from "@/features/accommodation/paused/RegistrationStay"
+// import { indexAccommodation } from "@/features/accommodation/paused/rules"
 import {
   useRegistration,
-  useRegistrations,
   useSetRegistrationStatus,
 } from "@/features/registrations/api"
 import {
@@ -37,6 +39,7 @@ import {
 import {
   displayName,
   formatCreatedAt,
+  formatIndiaFlight,
   formatStay,
 } from "@/features/registrations/format"
 import {
@@ -47,7 +50,7 @@ import {
   nightsBetween,
   wantsBed,
 } from "@/features/registrations/stay"
-import { canReview, useSession } from "@/lib/auth-client"
+import { canReview, isAdmin, useSession } from "@/lib/auth-client"
 import { formatMobile } from "@/lib/phone"
 import {
   GENDERS,
@@ -77,6 +80,58 @@ function accommodationText(registration: Registration) {
   if (summary === "Yes") return "Needed"
   if (summary === "No") return "Not needed"
   return `Needed for ${summary} people`
+}
+
+/**
+ * Where the registration's mandal has rooms, with the coordinator to call:
+ * the mandal's coordinator decides who sleeps where.
+ */
+function MandalRooms({
+  mandal,
+  data,
+}: {
+  mandal: string
+  data: AccommodationData
+}) {
+  const stays = data.mandalStays.filter((s) => s.mandal === mandal)
+  if (stays.length === 0) {
+    return (
+      <span className="mt-1 block text-2xs/relaxed text-muted-foreground">
+        No rooms given to {mandal} yet.
+      </span>
+    )
+  }
+  return (
+    <ul className="mt-1.5 flex flex-col gap-1.5">
+      {stays.map((stay) => {
+        const place = data.places.find((p) => p.id === stay.placeId)
+        return (
+          <li key={stay.id} className="flex flex-col gap-0.5 text-2xs/relaxed">
+            <span>
+              {place ? (
+                <Link
+                  to={`/accommodation/places/${place.id}`}
+                  className="font-medium hover:underline"
+                >
+                  {place.name}
+                </Link>
+              ) : (
+                "A removed place"
+              )}{" "}
+              <span className="text-muted-foreground">
+                · {stay.roomIds.length}{" "}
+                {stay.roomIds.length === 1 ? "room" : "rooms"} for {mandal}
+              </span>
+            </span>
+            <Contact
+              name={stay.coordinatorName}
+              mobile={stay.coordinatorMobile}
+            />
+          </li>
+        )
+      })}
+    </ul>
+  )
 }
 
 /** The next steps staff can take from each status. */
@@ -173,16 +228,18 @@ export function RegistrationDetail() {
     error,
     refetch,
   } = useRegistration(id)
-  // Every registration, for who else is in the rooms this one could go to.
-  const all = useRegistrations()
+  // Where their mandal's rooms are, and who to call about them.
   const accommodation = useAccommodation()
-  const index = React.useMemo(
-    () =>
-      accommodation.data && all.data
-        ? indexAccommodation(accommodation.data, all.data)
-        : undefined,
-    [accommodation.data, all.data]
-  )
+  // PAUSED 2026-10-11 — per-person allotment needed every registration, for
+  // who else is in the rooms this one could go to.
+  // const all = useRegistrations()
+  // const index = React.useMemo(
+  //   () =>
+  //     accommodation.data && all.data
+  //       ? indexAccommodation(accommodation.data, all.data)
+  //       : undefined,
+  //   [accommodation.data, all.data]
+  // )
 
   const back = <BackLink to="/registrations">All registrations</BackLink>
 
@@ -244,6 +301,18 @@ export function RegistrationDetail() {
                 {" "}
                 · changed {formatCreatedAt(r.editedAt)} by{" "}
                 {r.editedByName ?? "the team"}
+                {isAdmin(session?.user.role) && (
+                  <>
+                    {" "}
+                    ·{" "}
+                    <Link
+                      to={`/admin/logs?registration=${r.id}`}
+                      className="text-primary hover:underline"
+                    >
+                      See what changed
+                    </Link>
+                  </>
+                )}
               </>
             )}
           </>
@@ -278,7 +347,7 @@ export function RegistrationDetail() {
               const ownDates =
                 compareStay(m.arrival, r.arrival) !== 0 ||
                 compareStay(m.departure, r.departure) !== 0
-              const bed = index?.bedOf(r.id, m.id)
+              // const bed = index?.bedOf(r.id, m.id) // paused: per-person allotment
               return (
                 <li
                   key={m.id}
@@ -290,13 +359,14 @@ export function RegistrationDetail() {
                     {m.relation && (
                       <Badge variant="outline">{m.relation}</Badge>
                     )}
+                    {/* Paused with per-person allotment:
                     {bed && (
                       <Badge variant="info">
                         {bed.place.name} · Room {bed.room.label}
                       </Badge>
-                    )}
+                    )} */}
                     {/* Only worth saying when the party is split on it. */}
-                    {!bed && someWantBeds && wantsBed(r, m) && (
+                    {someWantBeds && wantsBed(r, m) && (
                       <Badge variant="outline">Needs a bed</Badge>
                     )}
                   </div>
@@ -352,7 +422,6 @@ export function RegistrationDetail() {
                 )}
               </Detail>
               <Detail label="Mandal">{r.mandal}</Detail>
-              <Detail label="From">{r.city}</Detail>
               {r.mobileVerification && (
                 <div className="col-span-2">
                   <Detail label="Number confirmed">
@@ -386,14 +455,12 @@ export function RegistrationDetail() {
               </Detail>
               <div className="col-span-2">
                 <Detail label="Accommodation">
-                  {index ? (
-                    <RegistrationStay
-                      registration={r}
-                      index={index}
-                      reviewer={reviewer}
+                  {accommodationText(r)}
+                  {r.accommodationRequired && accommodation.data && (
+                    <MandalRooms
+                      mandal={r.mandal}
+                      data={accommodation.data}
                     />
-                  ) : (
-                    accommodationText(r)
                   )}
                 </Detail>
               </div>
@@ -450,6 +517,28 @@ export function RegistrationDetail() {
               )}
             </dl>
           </Card>
+
+          {r.indiaTravel && (
+            <Card className="gap-3">
+              <CardTitle>Ahmedabad airport</CardTitle>
+              <dl className="grid grid-cols-2 gap-3">
+                <div className="col-span-2">
+                  <Detail label="Pickup when landing">
+                    {r.indiaTravel.arrival
+                      ? formatIndiaFlight(r.indiaTravel.arrival)
+                      : "Not needed"}
+                  </Detail>
+                </div>
+                <div className="col-span-2">
+                  <Detail label="Drop for the flight out">
+                    {r.indiaTravel.departure
+                      ? formatIndiaFlight(r.indiaTravel.departure)
+                      : "Not needed"}
+                  </Detail>
+                </div>
+              </dl>
+            </Card>
+          )}
 
           {r.notes && (
             <Card className="gap-2">

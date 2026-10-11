@@ -1,12 +1,17 @@
 /**
- * Accommodation, shaped as upasana-be sends it (src/lib/accommodation.ts).
+ * Accommodation, shaped as upasana-be sends it (src/lib/accommodation.ts,
+ * src/lib/mandal-stays.ts).
  *
- * A place has rooms; each person who sleeps over gets one allotment, to one
- * room. Their nights come from their own arrival and departure, so a room's
- * beds are counted night by night.
+ * A place has rooms. The team gives a mandal some of them — a `MandalStay` —
+ * and the mandal's coordinator decides who sleeps where, reporting how many
+ * people are in each room. (Per-person allotment, which this replaced on
+ * 2026-10-11, is kept in ./paused.)
  */
 
-export const PLACE_KINDS = { guest_house: "Guest house", hotel: "Hotel" } as const
+export const PLACE_KINDS = {
+  guest_house: "Guest house",
+  hotel: "Hotel",
+} as const
 export type PlaceKind = keyof typeof PLACE_KINDS
 
 export const ROOM_KINDS = {
@@ -31,11 +36,11 @@ export const FLOORS = [
 export const floorLabel = (floor: number) => FLOORS[floor] ?? `Floor ${floor}`
 
 export type Room = {
-  /** Stable: allotments point at it, so relabelling a room keeps its people. */
+  /** Stable: a mandal's rooms point at it, so relabelling a room keeps it theirs. */
   id: string
   label: string
   beds: number
-  /** Mattresses the room can take on top of its beds, used only when the beds run out. */
+  /** Mattresses the room can take on top of its beds. */
   extraBeds?: number
   kind: RoomKind
   /** 0 = ground floor, 1 = 1st floor … 4 = 4th floor. */
@@ -49,6 +54,7 @@ export type Place = {
   address: string
   area?: string
   mapUrl?: string
+  /** The place's own contact (the guest house's manager) — not a mandal's coordinator. */
   coordinatorName?: string
   /** E.164. */
   coordinatorMobile?: string
@@ -57,49 +63,42 @@ export type Place = {
   rooms: Room[]
 }
 
-export type Allotment = {
+/** Rooms at a place given to one mandal, and how full its coordinator says they are. */
+export type MandalStay = {
   id: string
-  registrationId: string
-  /** `Member.id` on the registration. */
-  memberId: string
   placeId: string
-  roomId: string
-  /** The team let them share another registration's family room: relatives. */
-  sharesRoom?: boolean
-  allottedByName: string
-  allottedAt: string
-}
-
-/** Whether a registration was sent its room details, and whether they still hold. */
-export type NoticeState = {
-  registrationId: string
-  sentAt?: string
-  sentByName?: string
-  upToDate: boolean
+  mandal: string
+  coordinatorName: string
+  /** E.164. */
+  coordinatorMobile: string
+  notes?: string
+  roomIds: string[]
+  /** People in each room, as last reported. A room missing here is not reported yet. */
+  occupancy: { roomId: string; people: number }[]
+  occupancyUpdatedAt?: string
+  occupancyUpdatedByName?: string
+  createdByName: string
+  updatedAt: string
 }
 
 export type AccommodationData = {
   places: Place[]
-  allotments: Allotment[]
-  notices: NoticeState[]
-  /** WhatsApp is set up on the server, so room details can be sent from here. */
-  whatsApp: boolean
-}
-
-/** Where a registration's people stay, as sent to them. */
-export type StayNotice = {
-  places: {
-    name: string
-    address: string
-    area?: string
-    mapUrl?: string
-    coordinatorName?: string
-    coordinatorMobile?: string
-    rooms: { label: string; people: string[] }[]
-  }[]
+  /** Every mandal's for staff and admins; only their own for a sanchalak. */
+  mandalStays: MandalStay[]
 }
 
 /** What the place editor saves. A room without an id is new. */
 export type PlaceInput = Omit<Place, "id" | "sortOrder" | "rooms"> & {
   rooms: (Omit<Room, "id"> & { id?: string })[]
 }
+
+/** What giving a mandal rooms, or changing them, saves. */
+export type MandalStayInput = Pick<
+  MandalStay,
+  | "placeId"
+  | "mandal"
+  | "coordinatorName"
+  | "coordinatorMobile"
+  | "notes"
+  | "roomIds"
+>

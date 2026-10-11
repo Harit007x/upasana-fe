@@ -6,8 +6,10 @@ import { PublicHeader } from "@/components/layout/PublicHeader"
 import { Button, buttonVariants } from "@/components/ui/button"
 import { Field, Input } from "@/components/ui/input"
 import { PhoneInput } from "@/components/ui/phone-input"
-import { Card, CardTitle, EmptyState, Skeleton } from "@/components/ui/primitives"
-import { StayDetails } from "@/features/accommodation/components"
+import { EmptyState, Skeleton } from "@/components/ui/primitives"
+// import { Card, CardTitle } from "@/components/ui/primitives" // paused: room details card
+// PAUSED 2026-10-11 — per-person room allotment; the server no longer sends `stay`.
+// import { StayDetails } from "@/features/accommodation/paused/components"
 import {
   useMyRegistrations,
   useSendOtp,
@@ -37,8 +39,8 @@ const LOCKED: Partial<Record<Registration["status"], string>> = {
  * No account: the primary contact's number is the key. A code on WhatsApp
  * proves it is theirs, and opens the one registration that number is the
  * contact for, in the same form. The contact number
- * itself is fixed here; a confirmed registration goes back to pending for the
- * seva team to look over the change.
+ * itself is fixed here. A confirmed registration stays confirmed; the change
+ * is logged for the admins (Logs screen).
  */
 export function EditMyRegistration() {
   // Arriving from "Edit my registration instead" on the new-registration form,
@@ -121,6 +123,7 @@ export function EditMyRegistration() {
   } else {
     body = (
       <div className="flex flex-col gap-4">
+        {/* PAUSED 2026-10-11 — per-person room allotment.
         {chosen.stay && (
           <Card className="gap-3">
             <CardTitle>Where you are staying</CardTitle>
@@ -133,6 +136,7 @@ export function EditMyRegistration() {
             WhatsApp.
           </p>
         )}
+        */}
         <p className="rounded-md bg-muted px-3 py-2 text-2xs/relaxed text-muted-foreground">
           Changing{" "}
           <span className="font-mono font-medium text-foreground">
@@ -140,9 +144,10 @@ export function EditMyRegistration() {
           </span>
           .
           {chosen.status === "confirmed" &&
-            " It is confirmed now; after you save, the seva team looks over your changes again."}
+            " It stays confirmed after you save; the seva team can see what you changed."}
+          {/* Paused with per-person allotment:
           {chosen.stay &&
-            " Changing dates or people may change your rooms."}
+            " Changing dates or people may change your rooms."} */}
         </p>
         <RegistrationForm
           key={chosen.id}

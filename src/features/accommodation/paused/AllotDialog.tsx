@@ -1,3 +1,4 @@
+// PAUSED 2026-10-11 — per-person room allotment. Not imported anywhere; see README.md.
 import {
   RiErrorWarningLine,
   RiLoader4Line,

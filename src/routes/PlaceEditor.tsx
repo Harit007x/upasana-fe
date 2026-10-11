@@ -29,19 +29,16 @@ import {
   useDeletePlace,
   useSavePlace,
 } from "@/features/accommodation/api"
-import {
-  indexAccommodation,
-  type AccommodationIndex,
-} from "@/features/accommodation/rules"
+import { holders } from "@/features/accommodation/mandal-stays"
 import {
   PLACE_KINDS,
   FLOORS,
   ROOM_KINDS,
+  type MandalStay,
   type Place,
   type PlaceKind,
   type RoomKind,
 } from "@/features/accommodation/types"
-import { useRegistrations } from "@/features/registrations/api"
 import {
   DEFAULT_COUNTRY_CODE,
   fromE164,
@@ -72,37 +69,26 @@ function nextNumber(rooms: RoomDraft[]) {
 
 /**
  * `/accommodation/places/new` and `/accommodation/places/:id/edit` (admin):
- * a place's details and its rooms. Rooms with people in them cannot be
- * removed here; the server also refuses changes they would no longer fit
- * (fewer beds, another type) and says who to move first.
+ * a place's details and its rooms. A room given to a mandal cannot be removed
+ * here — take it back from the mandal first; the server checks this too.
  */
 export function PlaceEditor() {
   const { id } = useParams()
   const accommodation = useAccommodation()
-  const registrations = useRegistrations()
-  const index = React.useMemo(
-    () =>
-      accommodation.data && registrations.data
-        ? indexAccommodation(accommodation.data, registrations.data)
-        : undefined,
-    [accommodation.data, registrations.data]
-  )
 
-  if (accommodation.isError || registrations.isError) {
+  if (accommodation.isError) {
     return (
       <LoadError
         title="Could not load this place"
-        error={accommodation.error ?? registrations.error}
-        onRetry={() => {
-          void accommodation.refetch()
-          void registrations.refetch()
-        }}
+        error={accommodation.error}
+        onRetry={() => void accommodation.refetch()}
       />
     )
   }
-  if (!index) return <Skeleton className="h-96" />
+  if (!accommodation.data) return <Skeleton className="h-96" />
 
-  const place = id ? index.placeById.get(id) : undefined
+  const { places, mandalStays } = accommodation.data
+  const place = id ? places.find((p) => p.id === id) : undefined
   if (id && !place) {
     return (
       <EmptyState
@@ -111,15 +97,16 @@ export function PlaceEditor() {
       />
     )
   }
-  return <PlaceForm key={place?.id ?? "new"} place={place} index={index} />
+  return <PlaceForm key={place?.id ?? "new"} place={place} stays={mandalStays} />
 }
 
 function PlaceForm({
   place,
-  index,
+  stays,
 }: {
   place?: Place
-  index: AccommodationIndex
+  /** Every mandal's rooms, to know which of this place's rooms are given. */
+  stays: MandalStay[]
 }) {
   const navigate = useNavigate()
   const save = useSavePlace(place?.id)
@@ -162,12 +149,10 @@ function PlaceForm({
   const [bulkKind, setBulkKind] = React.useState<RoomKind>("family")
   const [bulkFloor, setBulkFloor] = React.useState(0)
 
-  /** People in a saved room, on any night. */
-  const peopleIn = (roomId?: string) =>
-    place && roomId ? index.occupantsOf(place.id, roomId).length : 0
-  const totalPeople = place
-    ? place.rooms.reduce((sum, r) => sum + peopleIn(r.id), 0)
-    : 0
+  /** The mandal a saved room is given to, if any. */
+  const held = place ? holders(place, stays) : new Map<string, MandalStay>()
+  const heldBy = (roomId?: string) => (roomId ? held.get(roomId)?.mandal : undefined)
+  const mandalsHere = [...new Set(held.values())].map((s) => s.mandal)
   const totalBeds = rooms.reduce((sum, r) => sum + (Number(r.beds) || 0), 0)
 
   const updateRoom = (key: string, change: Partial<RoomDraft>) =>
@@ -324,14 +309,14 @@ function PlaceForm({
               onChange={(e) => setMapUrl(e.target.value)}
             />
           </Field>
-          <Field label="Coordinator">
+          <Field label="Place contact" hint="The guest house's own manager or office — mandals' coordinators are set when rooms are given.">
             <Input
               id="place-coordinator"
               value={coordinatorName}
               onChange={(e) => setCoordinatorName(e.target.value)}
             />
           </Field>
-          <Field label="Coordinator's mobile" error={errors.mobile}>
+          <Field label="Contact's mobile" error={errors.mobile}>
             <PhoneInput
               id="place-coordinator-mobile"
               countryCode={country}
@@ -361,10 +346,10 @@ function PlaceForm({
         <CardHeader>
           <CardTitle>Rooms</CardTitle>
           <CardDescription>
-            Gents and ladies rooms take only men or only women; a family room
-            takes one registration's people; a general room takes anyone. Extra
-            mattresses are used only when a room's beds run out. People who need
-            assistance or are 60+ are offered the lowest floors first.
+            Rooms are given to mandals from the place's page; each mandal's
+            coordinator decides who sleeps where. Type, floor and extra
+            mattresses help them choose — ground floor for anyone who needs
+            assistance or is 60+.
           </CardDescription>
         </CardHeader>
 
@@ -375,7 +360,7 @@ function PlaceForm({
         ) : (
           <ul className="-mx-4 flex flex-col divide-y divide-border border-y border-border">
             {rooms.map((room) => {
-              const people = peopleIn(room.id)
+              const mandal = heldBy(room.id)
               const error = errors[`room-${room.key}`]
               return (
                 <li key={room.key} className="flex flex-col gap-1 px-4 py-2.5">
@@ -447,9 +432,9 @@ function PlaceForm({
                       ))}
                     </NativeSelect>
                     <span className="ml-auto flex items-center gap-2">
-                      {people > 0 && (
-                        <span className="text-2xs text-muted-foreground tabular-nums">
-                          {people} {people === 1 ? "person" : "people"}
+                      {mandal && (
+                        <span className="max-w-32 truncate text-2xs text-muted-foreground" title={mandal}>
+                          {mandal}
                         </span>
                       )}
                       <Button
@@ -458,11 +443,11 @@ function PlaceForm({
                         size="icon-sm"
                         aria-label={`Remove room ${room.label}`}
                         title={
-                          people > 0
-                            ? "Move its people to another room first"
+                          mandal
+                            ? `Given to ${mandal} — take it back from them first`
                             : undefined
                         }
-                        disabled={people > 0}
+                        disabled={!!mandal}
                         onClick={() =>
                           setRooms((list) =>
                             list.filter((r) => r.key !== room.key)
@@ -577,9 +562,11 @@ function PlaceForm({
             type="button"
             variant="destructive"
             size="lg"
-            disabled={totalPeople > 0}
+            disabled={mandalsHere.length > 0}
             title={
-              totalPeople > 0 ? "Move everyone staying here first" : undefined
+              mandalsHere.length > 0
+                ? `Rooms here are given to ${mandalsHere.join(", ")} — take them back first`
+                : undefined
             }
             onClick={() => setConfirmDelete(true)}
           >
@@ -606,7 +593,7 @@ function PlaceForm({
           <DialogContent>
             <DialogHeader
               title={`Remove ${place.name}?`}
-              description="Its rooms go with it. Nobody is staying there."
+              description="Its rooms go with it. No mandal has rooms there."
             />
             <DialogBody>
               {remove.isError && (

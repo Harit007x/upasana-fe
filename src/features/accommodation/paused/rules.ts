@@ -1,3 +1,4 @@
+// PAUSED 2026-10-11 — per-person room allotment. Not imported anywhere; see README.md.
 import { STAY_DATES, formatStayDate } from "@/config/event"
 import { wantsBed } from "@/features/registrations/stay"
 import type { Member, Registration } from "@/features/registrations/types"

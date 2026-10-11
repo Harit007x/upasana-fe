@@ -1,10 +1,36 @@
-import { TIME_SLOTS, formatStayDate } from "@/config/event"
+import { TIME_SLOTS, formatStayDate, mealOf, toLocalDate } from "@/config/event"
+import { formatTime } from "@/lib/time"
 
-import type { Registration, StayPoint } from "./types"
+import type { IndiaFlight, Registration, StayPoint } from "./types"
 
-/** "Thu 24 Dec · Day before, evening" */
+/** "Thu 24 Dec · Day before, evening · with dinner" */
 export function formatStay(point: StayPoint) {
-  return `${formatStayDate(point.date)}, ${TIME_SLOTS[point.slot].split(" (")[0].toLowerCase()}`
+  const meal = formatMeal(point)
+  return `${formatStayDate(point.date)}, ${TIME_SLOTS[point.slot].split(" (")[0].toLowerCase()}${meal ? ` · ${meal}` : ""}`
+}
+
+/** "with breakfast" or "no breakfast"; empty on registrations from before it was asked. */
+export function formatMeal(point: Pick<StayPoint, "slot" | "meal">) {
+  const meal = mealOf(point.slot)
+  if (!meal || point.meal === undefined) return ""
+  return point.meal ? `with ${meal}` : `no ${meal}`
+}
+
+const FLIGHT_DATE = new Intl.DateTimeFormat("en-IN", {
+  weekday: "short",
+  day: "numeric",
+  month: "short",
+})
+
+/** "Sun 24 Jan, 6:30 am · AI 144" — the time and number when given. */
+export function formatIndiaFlight(flight: IndiaFlight) {
+  const when = [
+    FLIGHT_DATE.format(toLocalDate(flight.date)).replace(",", ""),
+    flight.time && formatTime(flight.time),
+  ]
+    .filter(Boolean)
+    .join(", ")
+  return [when, flight.flight].filter(Boolean).join(" · ")
 }
 
 /** The name a registration goes by in lists: the family name, else the person. */

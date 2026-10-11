@@ -11,7 +11,11 @@ import { EditRegistration } from "@/routes/EditRegistration"
 import { AccessPending } from "@/routes/AccessPending"
 import { AdminTeam } from "@/routes/AdminTeam"
 import { Dashboard } from "@/routes/Dashboard"
+import { GuestEditor } from "@/routes/GuestEditor"
+import { GuestRegister } from "@/routes/GuestRegister"
+import { Guests } from "@/routes/Guests"
 import { Login } from "@/routes/Login"
+import { Logs } from "@/routes/Logs"
 import { NewRegistration } from "@/routes/NewRegistration"
 import { PlaceEditor } from "@/routes/PlaceEditor"
 import { Register } from "@/routes/Register"
@@ -76,6 +80,8 @@ export function App() {
           <Route path="/register/edit" element={<EditMyRegistration />} />
           {/* Public: the published schedule, the link shared with devotees. */}
           <Route path="/schedule" element={<PublicSchedule />} />
+          {/* Public: shared with devotees bringing day guests. */}
+          <Route path="/guests/register" element={<GuestRegister />} />
           {/* Public: an invitee may not have an account yet. */}
           <Route path="/invite/:token" element={<AcceptInvite />} />
           <Route
@@ -94,6 +100,9 @@ export function App() {
               element={<EditRegistration />}
             />
             <Route path="accommodation" element={<Accommodation />} />
+            <Route path="guests" element={<Guests />} />
+            <Route path="guests/new" element={<GuestEditor />} />
+            <Route path="guests/:id/edit" element={<GuestEditor />} />
             <Route
               path="accommodation/places/new"
               element={
@@ -119,6 +128,14 @@ export function App() {
               element={
                 <RequireAdmin>
                   <AdminTeam />
+                </RequireAdmin>
+              }
+            />
+            <Route
+              path="admin/logs"
+              element={
+                <RequireAdmin>
+                  <Logs />
                 </RequireAdmin>
               }
             />

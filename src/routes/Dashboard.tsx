@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/primitives"
 import { formatStayDate } from "@/config/event"
 import { useAccommodation } from "@/features/accommodation/api"
+import type { AccommodationData } from "@/features/accommodation/types"
 import { useRegistrations } from "@/features/registrations/api"
 import { StatusBadge, TypeBadge } from "@/features/registrations/components"
 import { displayName, formatCreatedAt } from "@/features/registrations/format"
@@ -183,6 +184,10 @@ function Breakdown({
   )
 }
 
+/** Rooms given to mandals, across every place. */
+const roomsGiven = (data: AccommodationData) =>
+  data.mandalStays.reduce((sum, s) => sum + s.roomIds.length, 0)
+
 export function Dashboard() {
   const {
     data: registrations,
@@ -202,16 +207,13 @@ export function Dashboard() {
       title={scope ? `Overview · ${scope}` : "Overview"}
       description={`Who is coming${scope ? ` from ${scope}` : ""}, when, and what they need. Cancelled registrations are left out of the counts.`}
       actions={
-        // Phones reach this from the tab bar instead.
-        <div className="hidden sm:block">
-          <Link
-            to="/registrations/new"
-            className={buttonVariants({ size: "lg" })}
-          >
-            <RiUserAddLine />
-            New registration
-          </Link>
-        </div>
+        <Link
+          to="/registrations/new"
+          className={buttonVariants({ size: "lg" })}
+        >
+          <RiUserAddLine />
+          New registration
+        </Link>
       }
     />
   )
@@ -257,7 +259,7 @@ export function Dashboard() {
           value={summary.needsAccommodation}
           detail={
             accommodation.data
-              ? `People who asked for accommodation · ${accommodation.data.allotments.length} have a room`
+              ? `People who asked for accommodation · ${roomsGiven(accommodation.data)} rooms given to mandals`
               : "People who asked for accommodation"
           }
         />

@@ -18,7 +18,12 @@ function ChoiceGroup<T extends string>({
   name: string
   value: T | ""
   onChange: (value: T) => void
-  options: { value: T; label: string; description?: string; icon?: React.ReactNode }[]
+  options: {
+    value: T
+    label: string
+    description?: string
+    icon?: React.ReactNode
+  }[]
   className?: string
   invalid?: boolean
 }) {
@@ -34,7 +39,7 @@ function ChoiceGroup<T extends string>({
           <label
             key={option.value}
             className={cn(
-              "relative flex cursor-pointer items-start gap-3 rounded-md border border-border p-3.5 transition-colors sm:gap-2.5 sm:p-3",
+              "relative flex cursor-pointer items-start gap-3 rounded-md border border-border p-3.5 transition-colors select-none sm:gap-2.5 sm:p-3",
               "hover:bg-muted/60 has-focus-visible:border-ring has-focus-visible:ring-2 has-focus-visible:ring-ring/30",
               checked && "border-primary bg-primary/5 hover:bg-primary/5",
               invalid && !checked && "border-destructive/60"
@@ -59,7 +64,9 @@ function ChoiceGroup<T extends string>({
               </span>
             )}
             <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-              <span className="text-xs/relaxed font-medium">{option.label}</span>
+              <span className="text-xs/relaxed font-medium">
+                {option.label}
+              </span>
               {option.description && (
                 <span className="text-2xs/relaxed text-muted-foreground">
                   {option.description}
@@ -93,7 +100,12 @@ function Checkbox({
   description?: React.ReactNode
 }) {
   return (
-    <label className={cn("flex cursor-pointer items-start gap-3 py-1 has-disabled:cursor-not-allowed has-disabled:opacity-60 sm:gap-2.5 sm:py-0", className)}>
+    <label
+      className={cn(
+        "flex cursor-pointer items-start gap-3 py-1 select-none has-disabled:cursor-not-allowed has-disabled:opacity-60 sm:gap-2.5 sm:py-0",
+        className
+      )}
+    >
       <input
         type="checkbox"
         className="peer mt-0.5 size-5 shrink-0 cursor-pointer accent-primary disabled:cursor-not-allowed sm:size-3.5"

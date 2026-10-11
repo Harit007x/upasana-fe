@@ -31,7 +31,7 @@ function ChoiceGroup<T extends string>({
     <div
       role="radiogroup"
       aria-invalid={invalid || undefined}
-      className={cn("grid gap-2", className)}
+      className={cn("grid grid-cols-1 gap-2", className)}
     >
       {options.map((option) => {
         const checked = option.value === value

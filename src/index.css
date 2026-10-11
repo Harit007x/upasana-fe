@@ -160,4 +160,10 @@
   html {
     @apply font-mono;
     }
+  /* Safety net: nothing may widen the page past the screen. On a phone one
+     over-wide element otherwise makes the browser zoom the whole page out.
+     `clip`, not `hidden`, so sticky headers keep working. */
+  #root {
+    overflow-x: clip;
+    }
 }

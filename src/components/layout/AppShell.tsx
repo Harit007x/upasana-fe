@@ -217,7 +217,7 @@ function PhoneNav({ main, more }: { main: NavItem[]; more: NavItem[] }) {
 
       <nav
         aria-label="Main"
-        className="fixed inset-x-0 bottom-0 z-40 grid auto-cols-fr grid-flow-col border-t border-border bg-background/95 pb-[env(safe-area-inset-bottom,0px)] backdrop-blur sm:hidden print:hidden"
+        className="fixed inset-x-0 bottom-0 z-40 grid auto-cols-[minmax(0,1fr)] grid-flow-col border-t border-border bg-background/95 pb-[env(safe-area-inset-bottom,0px)] backdrop-blur sm:hidden print:hidden"
       >
         {main.map(({ to, short, icon: Icon, nested }) => (
           <NavLink
@@ -375,8 +375,12 @@ export function PageHeader({
           <p className="text-xs/relaxed text-muted-foreground">{description}</p>
         )}
       </div>
+      {/* Phones: the buttons share the full width, rows of equal-width
+          buttons rather than a ragged wrap. */}
       {actions && (
-        <div className="flex flex-wrap items-center gap-2">{actions}</div>
+        <div className="flex w-full flex-wrap items-center gap-2 *:grow sm:w-auto sm:*:grow-0">
+          {actions}
+        </div>
       )}
     </div>
   )

@@ -155,7 +155,7 @@ function StayPicker({
   return (
     <div className="flex flex-col gap-2">
       <Field label={label} required error={error}>
-        <div className="grid gap-2 sm:grid-cols-[3fr_2fr]">
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
           <NativeSelect
             id={dateName}
             aria-label={`${label} day`}
@@ -402,7 +402,7 @@ export function StayTravelStep() {
 
         {!split && (
           <>
-            <div className="grid gap-4 sm:grid-cols-2">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <StayPicker
                 prefix="arrival"
                 label="Arriving"
@@ -464,7 +464,7 @@ export function StayTravelStep() {
                       </Button>
                     )}
                   </div>
-                  <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                     <StayPicker
                       prefix={`members.${index}.arrival`}
                       label="Arriving"
@@ -562,7 +562,7 @@ export function StayTravelStep() {
                       )}
                     </div>
                   ) : (
-                    <div className="grid gap-3 sm:grid-cols-2">
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                       {Array.from({ length: vehicles }, (_, index) => (
                         <Field
                           key={index}

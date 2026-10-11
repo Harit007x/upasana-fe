@@ -278,7 +278,7 @@ export function Dashboard() {
 
       <DayByDay summary={summary} />
 
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <Breakdown
           title="By mandal"
           description="Devotees per mandal, with the number of registrations."

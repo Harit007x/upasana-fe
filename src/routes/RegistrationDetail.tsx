@@ -331,7 +331,7 @@ export function RegistrationDetail() {
         }
       />
 
-      <div className="grid gap-4 lg:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         <Card className="gap-3 lg:col-span-2">
           <div className="flex flex-wrap items-baseline justify-between gap-2">
             <CardTitle>People ({r.members.length})</CardTitle>

@@ -179,7 +179,7 @@ function Row({
   children: React.ReactNode
 }) {
   return (
-    <li className="grid grid-cols-[3.75rem_1fr] gap-x-3 sm:grid-cols-[5rem_1fr] sm:gap-x-4">
+    <li className="grid grid-cols-[3.75rem_minmax(0,1fr)] gap-x-3 sm:grid-cols-[5rem_minmax(0,1fr)] sm:gap-x-4">
       <div className="text-right">{time}</div>
       <div className="relative pl-5 sm:pl-6">{children}</div>
     </li>

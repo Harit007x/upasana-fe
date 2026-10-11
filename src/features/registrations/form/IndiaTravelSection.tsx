@@ -61,7 +61,7 @@ function AirportLeg({
 
       {wanted && (
         <>
-          <div className="grid gap-3 sm:grid-cols-[3fr_2fr]">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
             <Field label={dateLabel} required error={dateError}>
               <Controller
                 control={control}
@@ -131,7 +131,7 @@ export function IndiaTravelSection({ weNeed }: { weNeed: string }) {
           unticked.
         </p>
       </div>
-      <div className="grid items-start gap-3 sm:grid-cols-2">
+      <div className="grid grid-cols-1 items-start gap-3 sm:grid-cols-2">
         <AirportLeg leg="Arrival" weNeed={weNeed} />
         <AirportLeg leg="Departure" weNeed={weNeed} />
       </div>

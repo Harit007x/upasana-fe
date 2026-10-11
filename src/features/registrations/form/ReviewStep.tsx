@@ -31,7 +31,7 @@ function Row({
   children: React.ReactNode
 }) {
   return (
-    <div className="grid grid-cols-[6.5rem_1fr] gap-3 py-2.5 text-xs/relaxed sm:grid-cols-[8rem_1fr] sm:py-2">
+    <div className="grid grid-cols-[6.5rem_minmax(0,1fr)] gap-3 py-2.5 text-xs/relaxed sm:grid-cols-[8rem_minmax(0,1fr)] sm:py-2">
       <dt className="text-muted-foreground">{label}</dt>
       <dd className="min-w-0 break-words">{children}</dd>
     </div>

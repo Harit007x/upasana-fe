@@ -344,7 +344,10 @@ export function AppShell() {
       </header>
 
       <main className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-5 px-4 pt-5 pb-[calc(var(--bottom-nav-h)+1.5rem)] sm:gap-6 sm:px-6 sm:pt-6">
-        <Outlet />
+        {/* Screens load on first visit (App.tsx); the header and tabs stay up meanwhile. */}
+        <React.Suspense fallback={null}>
+          <Outlet />
+        </React.Suspense>
       </main>
 
       <PhoneNav main={NAV} more={more} />

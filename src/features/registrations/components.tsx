@@ -7,6 +7,7 @@ import {
   RiFileCopyLine,
   RiHome4Line,
   RiPlaneLine,
+  RiQuestionLine,
   RiRouteLine,
   RiTrainLine,
 } from "@remixicon/react"
@@ -43,6 +44,7 @@ const TRAVEL_ICONS = {
   public_bus: RiBus2Line,
   other: RiRouteLine,
   local: RiHome4Line,
+  not_filled: RiQuestionLine,
 } satisfies Record<TravelMode, React.ComponentType>
 
 /** The icon for how someone is travelling: a train for train, and so on. */

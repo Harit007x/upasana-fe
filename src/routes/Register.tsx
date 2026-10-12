@@ -36,9 +36,10 @@ function RegisterPage() {
         action={<LanguagePicker />}
         banner
       >
-        <p className="max-w-prose text-xs/relaxed text-muted-foreground">
+        {/* One sentence per line, as the hosts wrote it. */}
+        <p className="max-w-prose text-xs/relaxed whitespace-pre-line text-muted-foreground">
           {t(
-            "Register yourself or your family. Add every person who is coming, including children, so the hosts can plan meals, seating and stay for everyone."
+            "Please register yourself or your family.\nKindly add every guest, including children.\nYou are helping for better plan of meals, seating and stay for everyone.\nYour registration Bhakti is sincerely appreciated… 🙏🙏"
           )}
         </p>
         <p className="text-xs/relaxed text-muted-foreground">

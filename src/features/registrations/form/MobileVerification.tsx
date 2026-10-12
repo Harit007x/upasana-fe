@@ -20,6 +20,7 @@ import { DevCodeNote } from "../components"
 import { REGISTRATION_STATUSES, type RegistrationSummary } from "../types"
 import { useFormOptions } from "./form-options"
 import {
+  MOBILE_OTP_REQUIRED,
   contactMobile,
   isContactVerified,
   type RegistrationFormValues,
@@ -163,6 +164,9 @@ export function MobileVerification() {
       />
     )
   }
+
+  // Codes switched off for now: nothing to confirm.
+  if (!MOBILE_OTP_REQUIRED) return null
 
   if (kept) {
     return (

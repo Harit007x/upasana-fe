@@ -15,12 +15,12 @@ export const GU: Record<string, string> = {
   // ------------------------------------------------------------ page header
   "Registration open": "નોંધણી ચાલુ છે",
   "Update your registration": "તમારી નોંધણીમાં ફેરફાર કરો",
-  "Register yourself or your family. Add every person who is coming, including children, so the hosts can plan meals, seating and stay for everyone.":
-    "તમારી કે તમારા પરિવારની નોંધણી કરો. બાળકો સહિત આવનાર દરેક વ્યક્તિને ઉમેરો, જેથી યજમાનો બધા માટે ભોજન, બેઠક અને ઉતારાનું આયોજન કરી શકે.",
+  "Please register yourself or your family.\nKindly add every guest, including children.\nYou are helping for better plan of meals, seating and stay for everyone.\nYour registration Bhakti is sincerely appreciated… 🙏🙏":
+    "કૃપા કરી તમારી કે તમારા પરિવારની નોંધણી કરો.\nબાળકો સહિત દરેક મહેમાનને અવશ્ય ઉમેરશો.\nઆથી તમે બધા માટે ભોજન, બેઠક અને ઉતારાના વધુ સારા આયોજનમાં મદદરૂપ થાઓ છો.\nતમારી નોંધણી રૂપી ભક્તિની અમે અંતઃકરણપૂર્વક કદર કરીએ છીએ… 🙏🙏",
   "Already registered?": "નોંધણી થઈ ગઈ છે?",
   "Update dates, travel, or the people coming. You need the mobile number given as the contact when you registered.":
     "તારીખો, મુસાફરી કે આવનાર વ્યક્તિઓમાં ફેરફાર કરો. નોંધણી વખતે આપેલો સંપર્ક મોબાઇલ નંબર જરૂરી છે.",
-  "Mandir, Ahmedabad": "મંદિર, અમદાવાદ",
+  "Upasana Dham Mandir, Ahmedabad": "ઉપાસના ધામ મંદિર, અમદાવાદ",
   "{n} days": "{n} દિવસ",
   Schedule: "કાર્યક્રમ",
   Register: "નોંધણી",
@@ -141,8 +141,12 @@ export const GU: Record<string, string> = {
   "Primary contact": "મુખ્ય સંપર્ક",
   "the primary contact": "મુખ્ય સંપર્ક",
   "Remove person {n}": "વ્યક્તિ {n} ને કાઢો",
-  "Full name": "પૂરું નામ",
-  "First and last name": "નામ અને અટક (અંગ્રેજીમાં)",
+  "First name": "નામ",
+  "Middle name (optional)": "પિતા/પતિનું નામ (વૈકલ્પિક)",
+  Surname: "અટક",
+  "e.g. Ramesh": "જેમ કે Ramesh",
+  "e.g. Kantilal": "જેમ કે Kantilal",
+  "e.g. Patel": "જેમ કે Patel",
   Gender: "જાતિ",
   Male: "પુરુષ",
   Female: "સ્ત્રી",
@@ -401,7 +405,8 @@ export const GU: Record<string, string> = {
     "નામ અંગ્રેજી અક્ષરોમાં લખો, જેમ કે Ramesh Patel",
   "Write the family name in English letters, e.g. Patel family":
     "પરિવારનું નામ અંગ્રેજી અક્ષરોમાં લખો, જેમ કે Patel family",
-  "Enter the full name": "પૂરું નામ લખો",
+  "Enter the first name": "નામ લખો",
+  "Enter the surname": "અટક લખો",
   "Enter a family name, e.g. Patel family":
     "પરિવારનું નામ લખો, જેમ કે Patel family",
   "Select a gender": "જાતિ પસંદ કરો",

@@ -105,23 +105,56 @@ const mealAnswer = (point: StayPoint) =>
 const STAY_DATE_VALUES: readonly string[] = STAY_DATES
 const SLOT_VALUES = Object.keys(TIME_SLOTS)
 
-/** A name: at least two characters, in English letters (see hasNonLatinLetters). */
-const nameField = (t: Translate, tooShort: string) =>
+/** One part of a name, in English letters (see hasNonLatinLetters). Required unless `missing` is not given. */
+const namePart = (t: Translate, missing?: string) =>
   z
     .string()
     .trim()
-    .min(2, tooShort)
+    .refine((v) => !missing || v.length > 0, missing)
     .refine(
       (v) => !hasNonLatinLetters(v),
       t("Write the name in English letters, e.g. Ramesh Patel")
     )
+
+/** The parts of a person's name, as asked on the form. */
+export type NameParts = {
+  firstName: string
+  middleName: string
+  surname: string
+}
+
+/** "Ramesh Kantilal Patel": the parts joined, without the gaps of a missing middle name. */
+export const fullNameOf = (name: NameParts) =>
+  [name.firstName, name.middleName, name.surname]
+    .map((part) => part.trim().replace(/\s+/g, " "))
+    .filter(Boolean)
+    .join(" ")
+
+/**
+ * A one-line name split into first, middle and surname: the first word, the
+ * last, and anything between. For drafts saved before the form asked for the
+ * parts. Mirrors splitFullName on the server.
+ */
+export function splitFullName(fullName: string): NameParts {
+  const words = fullName.trim().split(/\s+/).filter(Boolean)
+  if (words.length < 2) {
+    return { firstName: words[0] ?? "", middleName: "", surname: "" }
+  }
+  return {
+    firstName: words[0],
+    middleName: words.slice(1, -1).join(" "),
+    surname: words[words.length - 1],
+  }
+}
 
 const makeMemberSchema = (t: Translate) =>
   z.object({
     // The person's id on a saved registration, sent back so the server keeps
     // it (room allotments point at it). Not shown; missing for someone new.
     key: z.string().optional(),
-    fullName: nameField(t, t("Enter the full name")),
+    firstName: namePart(t, t("Enter the first name")),
+    middleName: namePart(t),
+    surname: namePart(t, t("Enter the surname")),
     gender: z.string().refine(isIn(Object.keys(GENDERS)), t("Select a gender")),
     age: z
       .string()
@@ -284,15 +317,15 @@ export function makeRegistrationFormSchema(lang: Lang = "en") {
       // later entry, which is the one to remove or correct.
       const firstWithName = new Map<string, number>()
       values.members.forEach((member, index) => {
-        const key = member.fullName.trim().replace(/\s+/g, " ").toLowerCase()
-        if (key.length < 2) return
+        const key = fullNameOf(member).toLowerCase()
+        if (!member.firstName.trim() || !member.surname.trim()) return
         const first = firstWithName.get(key)
         if (first === undefined) {
           firstWithName.set(key, index)
           return
         }
         issue(
-          ["members", index, "fullName"],
+          ["members", index, "firstName"],
           first === 0
             ? t("Already added as the primary contact")
             : t("Already added as person {n}", { n: first + 1 })
@@ -668,9 +701,16 @@ export function contactMobile(values: Pick<RegistrationFormValues, "members">) {
 }
 
 /**
+ * TEMPORARY: off until the WhatsApp Business API is set up to send codes. While
+ * off, the form asks for no code on the contact number. Turn back on together
+ * with MOBILE_OTP_REQUIRED in upasana-be/src/lib/otp.ts.
+ */
+export const MOBILE_OTP_REQUIRED = false
+
+/**
  * Whether the contact's number is verified: unchanged from the registration
  * being edited, vouched for in person, or confirmed by an OTP for this very
- * number.
+ * number. Always, while codes are switched off.
  */
 export function isContactVerified(
   values: Pick<
@@ -685,7 +725,7 @@ export function isContactVerified(
   const mobile = contactMobile(values)
   if (!mobile) return false
   if (values.keptMobile && mobile === values.keptMobile) return true
-  if (values.verifiedInPerson) return true
+  if (values.verifiedInPerson || !MOBILE_OTP_REQUIRED) return true
   return mobile === values.verifiedMobile && !!values.mobileVerificationToken
 }
 
@@ -773,8 +813,7 @@ export function relationAgeHints(
       ? age >= contactAge + gap.years
       : age <= contactAge - gap.years
     if (fits) return
-    const who =
-      contact.fullName.trim().split(/\s+/)[0] || t("the primary contact")
+    const who = contact.firstName.trim() || t("the primary contact")
     const vars = {
       relation: t(member.relation).toLowerCase(),
       years: gap.years,
@@ -840,8 +879,11 @@ export function relatedFields(
     case "mobileCountry":
       return [`${person}.mobile`]
     // Two people with one name: every name is compared with every other.
-    case "fullName":
-      return values.members.map((_, i) => `members.${i}.fullName`)
+    // The clash shows on the first name, whichever part was changed.
+    case "firstName":
+    case "middleName":
+    case "surname":
+      return values.members.map((_, i) => `members.${i}.firstName`)
     default:
       return []
   }
@@ -952,7 +994,9 @@ export const STEP_FIELDS = [
 
 export function emptyMember(): MemberFormValues {
   return {
-    fullName: "",
+    firstName: "",
+    middleName: "",
+    surname: "",
     gender: "",
     age: "",
     mobileCountry: DEFAULT_COUNTRY_CODE,
@@ -1046,7 +1090,9 @@ export function toNewRegistration(
     needsAccommodation: beds[index],
     // Empty for someone new: the server assigns their id.
     id: member.key ?? "",
-    fullName: member.fullName.trim(),
+    firstName: member.firstName.trim().replace(/\s+/g, " "),
+    middleName: orUndefined(member.middleName.trim().replace(/\s+/g, " ")),
+    surname: member.surname.trim().replace(/\s+/g, " "),
     gender: member.gender as Gender,
     age: Number(member.age),
     mobile: member.mobile
@@ -1148,6 +1194,7 @@ function contactProof(values: RegistrationFormValues) {
   const mobile = contactMobile(values)
   if (values.keptMobile && mobile === values.keptMobile) return {}
   if (values.verifiedInPerson) return { verifiedInPerson: true }
+  if (!MOBILE_OTP_REQUIRED) return {}
   return { mobileVerificationToken: values.mobileVerificationToken }
 }
 
@@ -1164,7 +1211,9 @@ export function fromRegistration(
     return {
       ...emptyMember(),
       key: member.id,
-      fullName: member.fullName,
+      firstName: member.firstName,
+      middleName: member.middleName ?? "",
+      surname: member.surname,
       gender: member.gender,
       age: String(member.age),
       mobileCountry: phone?.code ?? DEFAULT_COUNTRY_CODE,

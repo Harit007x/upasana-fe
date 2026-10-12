@@ -30,6 +30,7 @@ import { TravelModeIcon } from "../components"
 import { compareStay, isPresentOn, nightsBetween } from "../stay"
 import { TRAVEL_MODES, type TravelMode } from "../types"
 import {
+  fullNameOf,
   hasSplitDates,
   isSameDayFor,
   isSameDayVisit,
@@ -552,7 +553,7 @@ export function StayTravelStep() {
                 >
                   <div className="flex min-h-6 items-center justify-between gap-2">
                     <p className="text-xs/relaxed font-medium">
-                      {member.fullName || t("Person {n}", { n: index + 1 })}
+                      {fullNameOf(member) || t("Person {n}", { n: index + 1 })}
                     </p>
                     {/* Shows on hover with a mouse; always on touch screens,
                         which have no hover. "Clear" once this person has any
@@ -570,12 +571,12 @@ export function StayTravelStep() {
                           filled
                             ? t("Clear {name}'s arriving and leaving", {
                                 name:
-                                  member.fullName ||
+                                  fullNameOf(member) ||
                                   t("person {n}", { n: index + 1 }),
                               })
                             : t("Copy {name}'s arriving and leaving", {
                                 name:
-                                  above?.fullName ||
+                                  (above && fullNameOf(above)) ||
                                   t("person {n}", { n: index }),
                               })
                         }
@@ -852,7 +853,8 @@ export function StayTravelStep() {
                               noNight ? "text-muted-foreground" : "text-primary"
                             )}
                           />
-                          {member.fullName || t("Person {n}", { n: index + 1 })}
+                          {fullNameOf(member) ||
+                            t("Person {n}", { n: index + 1 })}
                           {noNight ? (
                             <span className="pr-0.5">
                               · {t("same day, no night")}
@@ -875,7 +877,8 @@ export function StayTravelStep() {
                         key={index}
                         id={`members.${index}.needsAccommodation`}
                         label={
-                          member.fullName || t("Person {n}", { n: index + 1 })
+                          fullNameOf(member) ||
+                          t("Person {n}", { n: index + 1 })
                         }
                         description={
                           noNight

@@ -85,7 +85,11 @@ export type StayPoint = {
 
 export type Member = {
   id: string
+  /** The parts below joined, as the server saves it: what every screen shows. */
   fullName: string
+  firstName: string
+  middleName?: string
+  surname: string
   gender: Gender
   age: number
   /**
@@ -224,7 +228,10 @@ export type NewRegistration = Omit<
   | "editedByName"
   | "stay"
   | "stayChanging"
+  | "members"
 > & {
+  /** The server joins the name's parts into `fullName`. */
+  members: Omit<Member, "fullName">[]
   /** From verifying the contact's mobile by OTP. Spent by the server, never stored. */
   mobileVerificationToken?: string
   /** A sanchalak or admin vouching for the number at the desk instead. */

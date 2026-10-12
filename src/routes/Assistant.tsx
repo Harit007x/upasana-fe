@@ -41,17 +41,18 @@ import {
  * a card they can export or open on the Reports screen. Read-only.
  */
 
-const [, SECOND_DAY, THIRD_DAY, , LAST_DAY] = EVENT.days
+const [FIRST_DAY, SECOND_DAY] = EVENT.days
+const LAST_DAY = EVENT.days[EVENT.days.length - 1]
 
 const SUGGESTIONS = [
-  `Who is arriving by train on ${formatDay(SECOND_DAY)}? I need to arrange pickups.`,
+  `Who is arriving by train on ${formatDay(FIRST_DAY)}? I need to arrange pickups.`,
   "How many plates do we need for each meal, every day?",
   "Which devotees from abroad need an airport pickup?",
-  `How many beds does each mandal need on the night of ${formatDay(THIRD_DAY)}?`,
+  `How many beds does each mandal need on the night of ${formatDay(SECOND_DAY)}?`,
   "List everyone who needs assistance, with a contact number.",
   `Who needs a drop to the station on ${formatDay(LAST_DAY)}?`,
   // Gujarati typed in English letters works too; the answer comes in English.
-  `${Number(SECOND_DAY.slice(-2))} na train thi ketla loko avshe?`,
+  `${Number(FIRST_DAY.slice(-2))} na train thi ketla loko avshe?`,
 ]
 
 /** "just now", "5 min ago", "3 h ago", "2 days ago". */

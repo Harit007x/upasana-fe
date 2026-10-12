@@ -23,17 +23,40 @@ import { useFormOptions } from "./form-options"
 import {
   asksYouthConvention,
   emptyMember,
+  fullNameOf,
   relationAgeHints,
   type MemberFormValues,
   type RegistrationFormValues,
 } from "./schema"
 import { YesNoQuestion } from "./YesNoQuestion"
 
+/** The name, asked in three parts. Only the middle name may be left empty. */
+const NAME_PARTS = [
+  {
+    part: "firstName",
+    label: "First name",
+    placeholder: "e.g. Ramesh",
+    autoComplete: "given-name",
+  },
+  {
+    part: "middleName",
+    label: "Middle name (optional)",
+    placeholder: "e.g. Kantilal",
+    autoComplete: "additional-name",
+  },
+  {
+    part: "surname",
+    label: "Surname",
+    placeholder: "e.g. Patel",
+    autoComplete: "family-name",
+  },
+] as const
+
 /** Whether a card has anything typed into it — an empty one is removed without asking. */
 const isFilledIn = (member: MemberFormValues | undefined) =>
   !!member &&
   !!(
-    member.fullName.trim() ||
+    fullNameOf(member) ||
     member.age ||
     member.gender ||
     member.mobile ||
@@ -142,7 +165,7 @@ export function MembersStep() {
             <div className="flex items-center justify-between gap-2">
               <div className="flex items-center gap-2">
                 <span className="font-heading text-xs font-medium">
-                  {members[index]?.fullName ||
+                  {(members[index] && fullNameOf(members[index])) ||
                     t("Person {n}", { n: index + 1 })}
                 </span>
                 {isPrimary && <Badge>{t("Primary contact")}</Badge>}
@@ -162,20 +185,28 @@ export function MembersStep() {
             </div>
 
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-              <Field
-                label={t("Full name")}
-                required
-                error={memberErrors?.fullName?.message}
-                className="col-span-2"
-              >
-                <Input
-                  id={`members.${index}.fullName`}
-                  placeholder={t("First and last name")}
-                  autoComplete={isPrimary ? "name" : "off"}
-                  aria-invalid={!!memberErrors?.fullName}
-                  {...register(`members.${index}.fullName`)}
-                />
-              </Field>
+              {/* Stacked on a phone: three names side by side leave each too narrow to read. */}
+              <div className="col-span-2 grid gap-3 sm:col-span-4 sm:grid-cols-3">
+                {NAME_PARTS.map(
+                  ({ part, label, placeholder, autoComplete }) => (
+                    <Field
+                      key={part}
+                      label={t(label)}
+                      required={part !== "middleName"}
+                      error={memberErrors?.[part]?.message}
+                    >
+                      <Input
+                        id={`members.${index}.${part}`}
+                        placeholder={t(placeholder)}
+                        autoComplete={isPrimary ? autoComplete : "off"}
+                        autoCapitalize="words"
+                        aria-invalid={!!memberErrors?.[part]}
+                        {...register(`members.${index}.${part}`)}
+                      />
+                    </Field>
+                  )
+                )}
+              </div>
               <Field
                 label={t("Gender")}
                 required
@@ -342,7 +373,8 @@ export function MembersStep() {
             title={t("Remove {name}?", {
               name:
                 (removing !== undefined &&
-                  members[removing]?.fullName.trim()) ||
+                  members[removing] &&
+                  fullNameOf(members[removing])) ||
                 t("person {n}", { n: (removing ?? 0) + 1 }),
             })}
             description={t("Their details are taken off this registration.")}

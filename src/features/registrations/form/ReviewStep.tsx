@@ -18,6 +18,7 @@ import {
 } from "../types"
 import { formatIndiaFlight, formatStay } from "../format"
 import {
+  fullNameOf,
   hasSplitDates,
   indiaTravelOf,
   bedsWanted,
@@ -140,7 +141,7 @@ export function ReviewStep({
               className="flex flex-col gap-0.5 px-3 py-2.5 sm:py-2"
             >
               <span className="text-xs/relaxed font-medium break-words">
-                {member.fullName}
+                {fullNameOf(member)}
                 {index === 0 && (
                   <span className="font-normal text-muted-foreground">
                     {" "}
@@ -206,7 +207,7 @@ export function ReviewStep({
             </>
           ) : (
             values.members.map((member, index) => (
-              <Row key={index} label={member.fullName}>
+              <Row key={index} label={fullNameOf(member)}>
                 {stayText(
                   member.arrivalDate,
                   member.arrivalSlot,
@@ -277,7 +278,7 @@ export function ReviewStep({
                           names: values.members
                             .map((m, i) =>
                               beds[i]
-                                ? m.fullName || t("Person {n}", { n: i + 1 })
+                                ? fullNameOf(m) || t("Person {n}", { n: i + 1 })
                                 : ""
                             )
                             .filter(Boolean)

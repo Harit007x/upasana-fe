@@ -1,6 +1,8 @@
 import {
   DEFAULT_VALUES,
   emptyMember,
+  splitFullName,
+  type MemberFormValues,
   type RegistrationFormValues,
 } from "./schema"
 
@@ -101,7 +103,7 @@ function withDefaults(
 ): RegistrationFormValues {
   const members =
     Array.isArray(values.members) && values.members.length > 0
-      ? values.members.map((member) => ({ ...emptyMember(), ...member }))
+      ? values.members.map(withNameParts)
       : DEFAULT_VALUES.members
   // The pickup was a tick box (true/false) before it became Yes or No.
   const pickup: unknown = values.needsPickup
@@ -111,8 +113,26 @@ function withDefaults(
     ...DEFAULT_VALUES,
     ...values,
     members,
+    stashedMembers: Array.isArray(values.stashedMembers)
+      ? values.stashedMembers.map(withNameParts)
+      : DEFAULT_VALUES.stashedMembers,
     needsPickup: needsPickup ?? DEFAULT_VALUES.needsPickup,
   }
+}
+
+/**
+ * A stored person with the form's current fields. The name was one "full
+ * name" box before it was asked in three parts: a draft from then is split.
+ */
+function withNameParts(member: Partial<MemberFormValues>): MemberFormValues {
+  const { fullName, ...rest } = member as Partial<MemberFormValues> & {
+    fullName?: unknown
+  }
+  const parts =
+    typeof fullName === "string" && rest.firstName === undefined
+      ? splitFullName(fullName)
+      : {}
+  return { ...emptyMember(), ...parts, ...rest }
 }
 
 function clampStep(step: unknown) {

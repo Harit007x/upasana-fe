@@ -5,7 +5,8 @@ import {
   OVERSEAS_MANDALS,
   YOUTH_MAX_AGE,
   isLocalMandal,
-  STAY_DATES,
+  ARRIVAL_DATES,
+  DEPARTURE_DATES,
   TIME_SLOTS,
   EVENT,
   formatDay,
@@ -104,7 +105,8 @@ const mealTaken = (slot: string, answer: string) =>
 /** A saved meal answer back as the form's "yes", "no" or unanswered. */
 const mealAnswer = (point: StayPoint) =>
   point.meal === undefined ? "" : point.meal ? "yes" : "no"
-const STAY_DATE_VALUES: readonly string[] = STAY_DATES
+const ARRIVAL_DATE_VALUES: readonly string[] = ARRIVAL_DATES
+const DEPARTURE_DATE_VALUES: readonly string[] = DEPARTURE_DATES
 const SLOT_VALUES = Object.keys(TIME_SLOTS)
 
 /** One part of a name, in English letters (see hasNonLatinLetters). Required unless `missing` is not given. */
@@ -155,7 +157,7 @@ const makeMemberSchema = (t: Translate) =>
     // it (room allotments point at it). Not shown; missing for someone new.
     key: z.string().optional(),
     firstName: namePart(t, t("Enter the first name")),
-    middleName: namePart(t),
+    middleName: namePart(t, t("Enter the middle name")),
     surname: namePart(t, t("Enter the surname")),
     gender: z.string().refine(isIn(Object.keys(GENDERS)), t("Select a gender")),
     age: z
@@ -415,11 +417,11 @@ export function makeRegistrationFormSchema(lang: Lang = "en") {
       }
 
       if (!hasSplitDates(values)) {
-        if (!isIn(STAY_DATE_VALUES)(values.arrivalDate))
+        if (!isIn(ARRIVAL_DATE_VALUES)(values.arrivalDate))
           issue(["arrivalDate"], t("Select the arrival day"))
         if (!isIn(SLOT_VALUES)(values.arrivalSlot))
           issue(["arrivalSlot"], t("Select a time"))
-        if (!isIn(STAY_DATE_VALUES)(values.departureDate))
+        if (!isIn(DEPARTURE_DATE_VALUES)(values.departureDate))
           issue(["departureDate"], t("Select the departure day"))
         if (!isIn(SLOT_VALUES)(values.departureSlot))
           issue(["departureSlot"], t("Select a time"))
@@ -435,8 +437,8 @@ export function makeRegistrationFormSchema(lang: Lang = "en") {
           slot: values.departureSlot,
         } as StayPoint
         const datesPicked =
-          isIn(STAY_DATE_VALUES)(values.arrivalDate) &&
-          isIn(STAY_DATE_VALUES)(values.departureDate) &&
+          isIn(ARRIVAL_DATE_VALUES)(values.arrivalDate) &&
+          isIn(DEPARTURE_DATE_VALUES)(values.departureDate) &&
           isIn(SLOT_VALUES)(values.arrivalSlot) &&
           isIn(SLOT_VALUES)(values.departureSlot)
         if (datesPicked && compareStay(departure, arrival) <= 0) {
@@ -457,10 +459,10 @@ export function makeRegistrationFormSchema(lang: Lang = "en") {
           )
           // Both checked, not one then the other, so every gap shows at once.
           const arrivalPicked =
-            isIn(STAY_DATE_VALUES)(member.arrivalDate) &&
+            isIn(ARRIVAL_DATE_VALUES)(member.arrivalDate) &&
             isIn(SLOT_VALUES)(member.arrivalSlot)
           const departurePicked =
-            isIn(STAY_DATE_VALUES)(member.departureDate) &&
+            isIn(DEPARTURE_DATE_VALUES)(member.departureDate) &&
             isIn(SLOT_VALUES)(member.departureSlot)
           if (!arrivalPicked)
             issue([...path, "arrivalDate"], t("Select arrival"))
@@ -1091,7 +1093,7 @@ export function toNewRegistration(
     // Empty for someone new: the server assigns their id.
     id: member.key ?? "",
     firstName: member.firstName.trim().replace(/\s+/g, " "),
-    middleName: orUndefined(member.middleName.trim().replace(/\s+/g, " ")),
+    middleName: member.middleName.trim().replace(/\s+/g, " "),
     surname: member.surname.trim().replace(/\s+/g, " "),
     gender: member.gender as Gender,
     age: Number(member.age),

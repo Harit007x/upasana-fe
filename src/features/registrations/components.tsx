@@ -107,12 +107,36 @@ export function RegistrationConfirmation({
       </div>
       <div className="flex flex-col gap-1">
         <span className="text-3xs tracking-wider text-muted-foreground uppercase">
-          {t("Registration code")}
+          {registration.type === "family"
+            ? t("Family code")
+            : t("Registration code")}
         </span>
         <span className="font-mono text-3xl font-semibold tracking-wider tabular-nums">
           {registration.code}
         </span>
       </div>
+      {/* Everyone in a family has their own number too. */}
+      {registration.type === "family" &&
+        registration.members.some((m) => m.code) && (
+          <div className="flex w-full max-w-sm flex-col gap-1.5 text-left">
+            <span className="text-center text-3xs tracking-wider text-muted-foreground uppercase">
+              {t("Each person's code")}
+            </span>
+            <ul className="divide-y divide-border rounded-md border border-border text-xs/relaxed">
+              {registration.members.map((m) => (
+                <li
+                  key={m.id}
+                  className="flex items-center justify-between gap-3 px-3 py-1.5"
+                >
+                  <span className="truncate">{m.fullName}</span>
+                  <span className="shrink-0 font-mono font-medium tabular-nums">
+                    {m.code}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
       <dl className="grid w-full max-w-sm grid-cols-2 gap-x-4 gap-y-2 text-left text-xs/relaxed">
         <dt className="text-muted-foreground">{t("People")}</dt>
         <dd className="tabular-nums">{registration.members.length}</dd>

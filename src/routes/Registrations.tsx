@@ -51,6 +51,7 @@ function matches(registration: Registration, query: string) {
     (registration.groupName ?? "").toLowerCase().includes(q) ||
     registration.members.some(
       (m) =>
+        (m.code ?? "").toLowerCase().includes(q) ||
         m.fullName.toLowerCase().includes(q) ||
         // Matches "98765 43210", "+91 9876543210" and "43210" alike.
         (q.replace(/\D/g, "").length >= 3 &&
@@ -62,7 +63,8 @@ function matches(registration: Registration, query: string) {
 /** One row per person, which is what the kitchen and accommodation teams ask for. */
 function downloadCsv(registrations: Registration[]) {
   const header = [
-    "Code",
+    "Person no.",
+    "Family no.",
     "Status",
     "Type",
     "Family name",
@@ -97,7 +99,8 @@ function downloadCsv(registrations: Registration[]) {
   ]
   const rows = registrations.flatMap((r) =>
     r.members.map((m) => [
-      r.code,
+      m.code ?? "",
+      r.type === "family" ? r.code : "",
       REGISTRATION_STATUSES[r.status],
       REGISTRATION_TYPES[r.type],
       r.groupName ?? "",

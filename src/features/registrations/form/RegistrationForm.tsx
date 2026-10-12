@@ -285,7 +285,8 @@ export function RegistrationForm({
             form.setValue("takenMobile", contact)
             form.setValue(
               "takenCode",
-              error.message.match(/YC-\d+/)?.[0] ?? t("another registration")
+              error.message.match(/DM-(?:F-)?\d+/)?.[0] ??
+                t("another registration")
             )
           }
           markAttempted(1)

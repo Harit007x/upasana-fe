@@ -265,6 +265,11 @@ function Details({ r }: { r: Registration }) {
               <li key={m.id} className="flex flex-col gap-0.5 px-3 py-2">
                 <span className="flex flex-wrap items-center gap-1.5 text-xs/relaxed font-medium">
                   {m.fullName}
+                  {m.code && m.code !== r.code && (
+                    <span className="font-mono text-2xs font-normal text-muted-foreground tabular-nums">
+                      {m.code}
+                    </span>
+                  )}
                   {m.isPrimary && <Badge>Contact</Badge>}
                   {m.relation && <Badge variant="outline">{m.relation}</Badge>}
                   {someBeds && wantsBed(r, m) && (

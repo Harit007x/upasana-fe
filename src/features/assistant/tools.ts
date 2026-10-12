@@ -1,4 +1,10 @@
-import { EVENT, MANDALS, NO_MANDAL, formatDay } from "@/config/event"
+import {
+  EVENT,
+  MANDALS,
+  NO_MANDAL,
+  STAY_DATES,
+  formatDay,
+} from "@/config/event"
 import type { AccommodationData } from "@/features/accommodation/types"
 import { PLACE_KINDS } from "@/features/accommodation/types"
 import {
@@ -486,7 +492,7 @@ function runMealCounts(
 const findRegistrations: ToolDefinition = {
   name: "find_registrations",
   description:
-    "Looks up registrations by code (YC-0142), a person's or family's name, or a mobile number (any part of it), across every status, and returns everything in them: each person's dates, meals, bed and assistance, travel, pickups, notes. Up to 8 matches. Use it for questions about particular people.",
+    "Looks up registrations by code (a person's DM-0142, or a family's DM-F-0031), a person's or family's name, or a mobile number (any part of it), across every status, and returns everything in them: each person's dates, meals, bed and assistance, travel, pickups, notes. Up to 8 matches. Use it for questions about particular people.",
   input_schema: {
     type: "object",
     properties: {
@@ -516,7 +522,11 @@ export function searchRegistrations(
     .filter(Boolean)
     .map((w) => w.replace(/^(.{2,}?)(bhai|ben|behen|bahen)$/, "$1"))
   return registrations.filter((r) => {
-    if (r.code.toLowerCase() === q) return true
+    if (
+      r.code.toLowerCase() === q ||
+      r.members.some((m) => m.code?.toLowerCase() === q)
+    )
+      return true
     if (
       number.length >= 5 &&
       number.length === q.replace(/[\s+()-]/g, "").length &&
@@ -525,6 +535,7 @@ export function searchRegistrations(
       return true
     const text = [
       r.code,
+      ...r.members.map((m) => m.code ?? ""),
       r.groupName ?? "",
       ...r.members.map((m) => m.fullName),
     ]
@@ -546,6 +557,7 @@ function registrationDetail(r: Registration) {
     type: r.type,
     mandal: r.mandal,
     people: r.members.map((m) => ({
+      ...(m.code ? { code: m.code } : {}),
       name: m.fullName,
       gender: GENDERS[m.gender],
       age: m.age,
@@ -638,7 +650,8 @@ const accommodation: ToolDefinition = {
   },
 }
 
-const NIGHTS = EVENT.days.slice(0, -1)
+// Every night someone can sleep here, the one before the event included.
+const NIGHTS = STAY_DATES.slice(0, -1)
 
 export function computeAccommodation(
   data: ToolData,

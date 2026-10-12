@@ -15,7 +15,8 @@ import { DigitsInput, Field, Input } from "@/components/ui/input"
 import { NativeSelect } from "@/components/ui/select"
 import {
   EVENT,
-  STAY_DATES,
+  ARRIVAL_DATES,
+  DEPARTURE_DATES,
   TIME_SLOTS,
   TRAIN_STATIONS,
   formatStayDate,
@@ -251,11 +252,13 @@ function StayPicker({
             <option value="" disabled>
               {t("Day")}
             </option>
-            {STAY_DATES.map((date) => (
-              <option key={date} value={date}>
-                {formatStayDate(date, lang)}
-              </option>
-            ))}
+            {(prefix.endsWith("arrival") ? ARRIVAL_DATES : DEPARTURE_DATES).map(
+              (date) => (
+                <option key={date} value={date}>
+                  {formatStayDate(date, lang)}
+                </option>
+              )
+            )}
           </NativeSelect>
           <NativeSelect
             id={slotName}

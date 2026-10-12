@@ -15,8 +15,14 @@ export const EVENT = {
   days: ["2027-01-29", "2027-01-30", "2027-01-31", "2027-02-01"],
 } as const
 
-/** Days a guest can arrive on or leave on: the event days only. */
-export const STAY_DATES = EVENT.days
+/** Days a guest can arrive on: the day before the event, and the event days. Mirrors ARRIVAL_DATES on the server. */
+export const ARRIVAL_DATES = ["2027-01-28", ...EVENT.days] as const
+
+/** Days a guest can leave on: the event days only. */
+export const DEPARTURE_DATES = EVENT.days
+
+/** Every day a guest can be here, first to last. */
+export const STAY_DATES = ARRIVAL_DATES
 
 export type StayDate = (typeof STAY_DATES)[number]
 

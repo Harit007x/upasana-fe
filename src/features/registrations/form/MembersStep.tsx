@@ -30,7 +30,7 @@ import {
 } from "./schema"
 import { YesNoQuestion } from "./YesNoQuestion"
 
-/** The name, asked in three parts. Only the middle name may be left empty. */
+/** The name, asked in three parts, all required. */
 const NAME_PARTS = [
   {
     part: "firstName",
@@ -40,7 +40,7 @@ const NAME_PARTS = [
   },
   {
     part: "middleName",
-    label: "Middle name (optional)",
+    label: "Middle name",
     placeholder: "e.g. Kantilal",
     autoComplete: "additional-name",
   },
@@ -192,7 +192,7 @@ export function MembersStep() {
                     <Field
                       key={part}
                       label={t(label)}
-                      required={part !== "middleName"}
+                      required
                       error={memberErrors?.[part]?.message}
                     >
                       <Input

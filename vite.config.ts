@@ -2,13 +2,16 @@ import path from "path"
 import tailwindcss from "@tailwindcss/vite"
 import react from "@vitejs/plugin-react"
 import { defineConfig, loadEnv } from "vite"
+import { imagetools } from "vite-imagetools"
 
 // https://vite.dev/config/
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "")
 
   return {
-    plugins: [react(), tailwindcss()],
+    // imagetools: `?w=…&format=…` on an image import builds resized
+    // AVIF/WebP copies at build time (see the banner in PublicHeader).
+    plugins: [react(), tailwindcss(), imagetools()],
     resolve: {
       alias: {
         "@": path.resolve(import.meta.dirname, "./src"),

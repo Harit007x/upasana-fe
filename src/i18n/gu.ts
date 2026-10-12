@@ -138,7 +138,7 @@ export const GU: Record<string, string> = {
   "the primary contact": "મુખ્ય સંપર્ક",
   "Remove person {n}": "વ્યક્તિ {n} ને કાઢો",
   "First name": "નામ",
-  "Middle name (optional)": "પિતા/પતિનું નામ (વૈકલ્પિક)",
+  "Middle name": "પિતા/પતિનું નામ",
   Surname: "અટક",
   "e.g. Ramesh": "જેમ કે Ramesh",
   "e.g. Kantilal": "જેમ કે Kantilal",
@@ -346,6 +346,8 @@ export const GU: Record<string, string> = {
   "Thank you, {name}. Your registration is updated; the code stays the same.":
     "આભાર, {name}. તમારી નોંધણીમાં ફેરફાર થઈ ગયો છે; કોડ એ જ રહેશે.",
   "Registration code": "નોંધણી કોડ",
+  "Family code": "પરિવાર કોડ",
+  "Each person's code": "દરેક વ્યક્તિનો કોડ",
   "{n} of {total}": "{total} માંથી {n}",
   Status: "સ્થિતિ",
   Pending: "બાકી",
@@ -400,6 +402,7 @@ export const GU: Record<string, string> = {
     "પરિવારનું નામ અંગ્રેજી અક્ષરોમાં લખો, જેમ કે Patel family",
   "Enter the first name": "નામ લખો",
   "Enter the surname": "અટક લખો",
+  "Enter the middle name": "પિતા/પતિનું નામ લખો",
   "Enter a family name, e.g. Patel family":
     "પરિવારનું નામ લખો, જેમ કે Patel family",
   "Select a gender": "જાતિ પસંદ કરો",

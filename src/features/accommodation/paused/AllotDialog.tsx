@@ -126,7 +126,8 @@ function AllotContent({
           night,
           used:
             bedTakers(fit.others, night) +
-            people.filter((m) => takesBed(m) && nightsOf(m).includes(night)).length,
+            people.filter((m) => takesBed(m) && nightsOf(m).includes(night))
+              .length,
         })).sort((a, b) => b.used - a.used)[0]
         return [
           {
@@ -157,7 +158,7 @@ function AllotContent({
     return fit.canShare ? undefined : fit.reason
   }
 
-  /** "shares with YC-0167", when a room fits only if they share with relatives. */
+  /** "shares with DM-F-0103", when a room fits only if they share with relatives. */
   const sharing = (personId: string, roomId: string) => {
     if (!place) return []
     const room = place.rooms.find((r) => r.id === roomId)!
@@ -219,7 +220,6 @@ function AllotContent({
     )
   }
 
-
   return (
     <DialogContent className="max-w-lg">
       <DialogHeader
@@ -244,18 +244,22 @@ function AllotContent({
               setOverrides({})
             }}
           >
-            {suggestions.map(({ place: p, free, sameMandal, together, familyHere }) => (
-              <option key={p.id} value={p.id}>
-                {p.name} — {Math.max(0, free)} beds free
-                {familyHere > 0 ? ` · ${familyHere} of their family here` : ""}
-                {together && members.length > 1
-                  ? ` · all ${members.length} in one room`
-                  : ""}
-                {sameMandal > 0
-                  ? ` · ${sameMandal} from ${registration.mandal}`
-                  : ""}
-              </option>
-            ))}
+            {suggestions.map(
+              ({ place: p, free, sameMandal, together, familyHere }) => (
+                <option key={p.id} value={p.id}>
+                  {p.name} — {Math.max(0, free)} beds free
+                  {familyHere > 0
+                    ? ` · ${familyHere} of their family here`
+                    : ""}
+                  {together && members.length > 1
+                    ? ` · all ${members.length} in one room`
+                    : ""}
+                  {sameMandal > 0
+                    ? ` · ${sameMandal} from ${registration.mandal}`
+                    : ""}
+                </option>
+              )
+            )}
           </NativeSelect>
         </Field>
 
@@ -370,42 +374,44 @@ function AllotContent({
                 </button>
               )}
             </div>
-            {roomsInPlan.map(({ room, people, problem, busiest, sharesWith, extraUsed }) => (
-              <div
-                key={room.id}
-                className={cn(
-                  "flex flex-col gap-0.5 rounded-md border border-border p-2.5",
-                  problem && "border-destructive/40"
-                )}
-              >
-                <span className="flex flex-wrap items-center gap-1.5 text-xs/relaxed font-medium">
-                  Room {room.label}
-                  <RoomKindBadge kind={room.kind} />
-                  <Badge variant="outline">{floorLabel(room.floor)}</Badge>
-                </span>
-                <span className="text-2xs/relaxed">
-                  {people.map((p) => p.fullName.split(" ")[0]).join(", ")}
-                </span>
-                <span
+            {roomsInPlan.map(
+              ({ room, people, problem, busiest, sharesWith, extraUsed }) => (
+                <div
+                  key={room.id}
                   className={cn(
-                    "text-2xs/relaxed text-muted-foreground tabular-nums",
-                    problem && "text-destructive"
+                    "flex flex-col gap-0.5 rounded-md border border-border p-2.5",
+                    problem && "border-destructive/40"
                   )}
                 >
-                  {problem ??
-                    (extraUsed > 0
-                      ? `${room.beds} ${room.beds === 1 ? "bed" : "beds"} + ${extraUsed} extra ${extraUsed === 1 ? "mattress" : "mattresses"} on ${formatNight(busiest.night)}`
-                      : `${busiest.used} of ${room.beds} ${room.beds === 1 ? "bed" : "beds"} on the busiest night, ${formatNight(busiest.night)}`)}
-                </span>
-                {!problem && sharesWith.length > 0 && (
-                  <span className="flex items-start gap-1 text-2xs/relaxed text-amber-700 dark:text-amber-400">
-                    <RiErrorWarningLine className="mt-px size-3.5 shrink-0" />
-                    Shares with {sharesWith.join(", ")} — only if they are
-                    family. Check before saving.
+                  <span className="flex flex-wrap items-center gap-1.5 text-xs/relaxed font-medium">
+                    Room {room.label}
+                    <RoomKindBadge kind={room.kind} />
+                    <Badge variant="outline">{floorLabel(room.floor)}</Badge>
                   </span>
-                )}
-              </div>
-            ))}
+                  <span className="text-2xs/relaxed">
+                    {people.map((p) => p.fullName.split(" ")[0]).join(", ")}
+                  </span>
+                  <span
+                    className={cn(
+                      "text-2xs/relaxed text-muted-foreground tabular-nums",
+                      problem && "text-destructive"
+                    )}
+                  >
+                    {problem ??
+                      (extraUsed > 0
+                        ? `${room.beds} ${room.beds === 1 ? "bed" : "beds"} + ${extraUsed} extra ${extraUsed === 1 ? "mattress" : "mattresses"} on ${formatNight(busiest.night)}`
+                        : `${busiest.used} of ${room.beds} ${room.beds === 1 ? "bed" : "beds"} on the busiest night, ${formatNight(busiest.night)}`)}
+                  </span>
+                  {!problem && sharesWith.length > 0 && (
+                    <span className="flex items-start gap-1 text-2xs/relaxed text-amber-700 dark:text-amber-400">
+                      <RiErrorWarningLine className="mt-px size-3.5 shrink-0" />
+                      Shares with {sharesWith.join(", ")} — only if they are
+                      family. Check before saving.
+                    </span>
+                  )}
+                </div>
+              )
+            )}
             {unplaced.length > 0 && (
               <p className="rounded-md bg-amber-500/10 px-3 py-2 text-2xs/relaxed text-amber-800 dark:text-amber-300">
                 No room left here for{" "}

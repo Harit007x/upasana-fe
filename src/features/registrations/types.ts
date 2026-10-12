@@ -87,6 +87,8 @@ export type StayPoint = {
 
 export type Member = {
   id: string
+  /** Their own registration number, e.g. "DM-0142"; everyone has one, family or not. */
+  code?: string
   /** The parts below joined, as the server saves it: what every screen shows. */
   fullName: string
   firstName: string
@@ -165,7 +167,10 @@ export type IndiaTravel = {
 
 export type Registration = {
   id: string
-  /** Human-facing code printed on the confirmation, e.g. YC-0142. */
+  /**
+   * Human-facing number printed on the confirmation: the family number
+   * ("DM-F-0031") for a family, the person's own ("DM-0142") for an individual.
+   */
   code: string
   type: RegistrationType
   /** "Patel family" or "Surat yuvak mandal". Empty for individuals. */

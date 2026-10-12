@@ -592,7 +592,13 @@ const formatPoint = (point: Member["arrival"]) =>
   `${formatDay(point.date)}, ${point.slot}`
 
 export const COLUMNS = {
-  code: { label: "Code", value: (p) => p.registration.code },
+  // A person's own number on a row per person; the family's (or the one
+  // person's) on a row per registration.
+  code: {
+    label: "Code",
+    value: (p) => p.member.code ?? p.registration.code,
+    booking: (r) => r.code,
+  },
   name: { label: "Name", person: true, value: (p) => p.member.fullName },
   family: {
     label: "Family / name",

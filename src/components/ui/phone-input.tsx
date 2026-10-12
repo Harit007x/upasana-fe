@@ -1,6 +1,7 @@
 import { RiArrowDownSLine } from "@remixicon/react"
 import { cn } from "cn"
 
+import { useT } from "@/i18n/context"
 import { COUNTRY_CODES, cleanNationalNumber, countryFor } from "@/lib/phone"
 
 /**
@@ -25,6 +26,7 @@ function PhoneInput({
   invalid?: boolean
   placeholder?: string
 }) {
+  const { t } = useT()
   const country = countryFor(countryCode)
   const { max } = country
 
@@ -49,14 +51,14 @@ function PhoneInput({
         <RiArrowDownSLine className="size-4 text-muted-foreground sm:size-3.5" aria-hidden />
         <select
           id={`${id}-code`}
-          aria-label="Country code"
-          title={country.country}
+          aria-label={t("Country code")}
+          title={t(country.country)}
           className="absolute inset-0 cursor-pointer appearance-none opacity-0 [&>option]:bg-popover [&>option]:text-popover-foreground"
           {...codeProps}
         >
           {COUNTRY_CODES.map((c) => (
             <option key={c.code} value={c.code}>
-              {c.flag} {c.code} {c.country}
+              {c.flag} {c.code} {t(c.country)}
             </option>
           ))}
         </select>

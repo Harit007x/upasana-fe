@@ -26,6 +26,7 @@ const AccommodationPlace = page(
   "AccommodationPlace"
 )
 const AdminTeam = page(() => import("@/routes/AdminTeam"), "AdminTeam")
+const Assistant = page(() => import("@/routes/Assistant"), "Assistant")
 const Dashboard = page(() => import("@/routes/Dashboard"), "Dashboard")
 const EditMyRegistration = page(
   () => import("@/routes/EditMyRegistration"),
@@ -53,6 +54,7 @@ const PublicSchedule = page(
   "PublicSchedule"
 )
 const Register = page(() => import("@/routes/Register"), "Register")
+const Reports = page(() => import("@/routes/Reports"), "Reports")
 const RegistrationDetail = page(
   () => import("@/routes/RegistrationDetail"),
   "RegistrationDetail"
@@ -173,6 +175,22 @@ export function App() {
                 element={
                   <RequireAdmin>
                     <AdminTeam />
+                  </RequireAdmin>
+                }
+              />
+              <Route
+                path="admin/reports"
+                element={
+                  <RequireAdmin>
+                    <Reports />
+                  </RequireAdmin>
+                }
+              />
+              <Route
+                path="admin/assistant"
+                element={
+                  <RequireAdmin>
+                    <Assistant />
                   </RequireAdmin>
                 }
               />

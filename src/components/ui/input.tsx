@@ -1,5 +1,8 @@
 import { cn } from "cn"
 
+import { useT } from "@/i18n/context"
+import { asciiDigits } from "@/lib/phone"
+
 /**
  * Primitives written by hand rather than pulled from the shadcn registry.
  *
@@ -18,7 +21,7 @@ function Input({ className, ...props }: React.ComponentProps<"input">) {
       data-slot="input"
       className={cn(
         "flex h-10 w-full min-w-0 rounded-md border border-border bg-transparent px-3 py-1 text-base transition-all outline-none sm:h-8 sm:px-2.5 sm:text-xs/relaxed",
-        "placeholder:text-muted-foreground selection:bg-primary selection:text-primary-foreground",
+        "selection:bg-primary selection:text-primary-foreground placeholder:text-muted-foreground",
         "focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30",
         "disabled:pointer-events-none disabled:opacity-50",
         "aria-invalid:border-destructive aria-invalid:ring-2 aria-invalid:ring-destructive/20",
@@ -42,8 +45,10 @@ function DigitsInput({ onChange, ...props }: React.ComponentProps<"input">) {
       autoComplete="off"
       {...props}
       onChange={(event) => {
-        const digits = event.target.value.replace(/\D/g, "")
-        event.target.value = props.maxLength ? digits.slice(0, props.maxLength) : digits
+        const digits = asciiDigits(event.target.value).replace(/\D/g, "")
+        event.target.value = props.maxLength
+          ? digits.slice(0, props.maxLength)
+          : digits
         onChange?.(event)
       }}
     />
@@ -56,7 +61,7 @@ function Textarea({ className, ...props }: React.ComponentProps<"textarea">) {
       data-slot="textarea"
       className={cn(
         "flex min-h-24 w-full rounded-md border border-border bg-transparent px-3 py-2 text-base transition-all outline-none sm:min-h-20 sm:px-2.5 sm:py-1.5 sm:text-xs/relaxed",
-        "placeholder:text-muted-foreground field-sizing-content",
+        "field-sizing-content placeholder:text-muted-foreground",
         "focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30",
         "disabled:pointer-events-none disabled:opacity-50",
         "aria-invalid:border-destructive aria-invalid:ring-2 aria-invalid:ring-destructive/20",
@@ -86,12 +91,13 @@ function Label({ className, ...props }: React.ComponentProps<"label">) {
  * instead of "star".
  */
 function RequiredMark() {
+  const { t } = useT()
   return (
     <>
       <span aria-hidden className="ml-0.5 text-destructive">
         *
       </span>
-      <span className="sr-only"> (required)</span>
+      <span className="sr-only"> ({t("required")})</span>
     </>
   )
 }

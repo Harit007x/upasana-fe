@@ -15,11 +15,18 @@ import {
   useSendOtp,
   useVerifyOtp,
 } from "@/features/registrations/api"
-import { DevCodeNote, RegistrationConfirmation } from "@/features/registrations/components"
+import {
+  DevCodeNote,
+  RegistrationConfirmation,
+} from "@/features/registrations/components"
 import { RegistrationForm } from "@/features/registrations/form/RegistrationForm"
 import type { Registration } from "@/features/registrations/types"
+import { useT } from "@/i18n/context"
+import { LanguagePicker, LanguageProvider } from "@/i18n/LanguageProvider"
+import { serverMessage } from "@/i18n/translate"
 import {
   DEFAULT_COUNTRY_CODE,
+  asciiDigits,
   formatMobile,
   mobileError,
   toE164,
@@ -43,6 +50,15 @@ const LOCKED: Partial<Record<Registration["status"], string>> = {
  * is logged for the admins (Logs screen).
  */
 export function EditMyRegistration() {
+  return (
+    <LanguageProvider>
+      <EditMyRegistrationPage />
+    </LanguageProvider>
+  )
+}
+
+function EditMyRegistrationPage() {
+  const { t } = useT()
   // Arriving from "Edit my registration instead" on the new-registration form,
   // the number is already verified.
   const location = useLocation()
@@ -72,7 +88,7 @@ export function EditMyRegistration() {
             to="/register"
             className={buttonVariants({ variant: "outline", size: "lg" })}
           >
-            Back to registration
+            {t("Back to registration")}
           </Link>
         }
       />
@@ -92,11 +108,11 @@ export function EditMyRegistration() {
   } else if (mine.isError) {
     body = (
       <EmptyState
-        title="Could not open your registrations"
-        description={`${mine.error.message} Verify your number again to continue.`}
+        title={t("Could not open your registrations")}
+        description={`${serverMessage(t, mine.error.message)} ${t("Verify your number again to continue.")}`}
         action={
           <Button size="lg" onClick={startOver}>
-            Verify again
+            {t("Verify again")}
           </Button>
         }
       />
@@ -104,11 +120,14 @@ export function EditMyRegistration() {
   } else if (!chosen) {
     body = (
       <EmptyState
-        title="No registration under this number"
-        description={`${formatMobile(auth.mobile)} is not the contact number on any registration. It may have been made with another family member's number.`}
+        title={t("No registration under this number")}
+        description={t(
+          "{mobile} is not the contact number on any registration. It may have been made with another family member's number.",
+          { mobile: formatMobile(auth.mobile) }
+        )}
         action={
           <Link to="/register" className={buttonVariants({ size: "lg" })}>
-            Register now
+            {t("Register now")}
           </Link>
         }
       />
@@ -116,8 +135,8 @@ export function EditMyRegistration() {
   } else if (LOCKED[chosen.status]) {
     body = (
       <EmptyState
-        title={`${chosen.code} cannot be changed online`}
-        description={LOCKED[chosen.status]!}
+        title={t("{code} cannot be changed online", { code: chosen.code })}
+        description={t(LOCKED[chosen.status]!)}
       />
     )
   } else {
@@ -138,13 +157,20 @@ export function EditMyRegistration() {
         )}
         */}
         <p className="rounded-md bg-muted px-3 py-2 text-2xs/relaxed text-muted-foreground">
-          Changing{" "}
-          <span className="font-mono font-medium text-foreground">
-            {chosen.code}
-          </span>
-          .
+          {(() => {
+            const [before, after] = t("Changing {code}.").split("{code}")
+            return (
+              <>
+                {before}
+                <span className="font-mono font-medium text-foreground">
+                  {chosen.code}
+                </span>
+                {after}
+              </>
+            )
+          })()}
           {chosen.status === "confirmed" &&
-            " It stays confirmed after you save; the seva team can see what you changed."}
+            ` ${t("It stays confirmed after you save; the seva team can see what you changed.")}`}
           {/* Paused with per-person allotment:
           {chosen.stay &&
             " Changing dates or people may change your rooms."} */}
@@ -166,10 +192,14 @@ export function EditMyRegistration() {
 
   return (
     <div className="flex min-h-svh flex-col">
-      <PublicHeader eyebrow="Update your registration">
+      <PublicHeader
+        eyebrow={t("Update your registration")}
+        action={<LanguagePicker />}
+      >
         <p className="max-w-prose text-xs/relaxed text-muted-foreground">
-          Update dates, travel, or the people coming. You need the mobile number
-          given as the contact when you registered.
+          {t(
+            "Update dates, travel, or the people coming. You need the mobile number given as the contact when you registered."
+          )}
         </p>
       </PublicHeader>
       <main className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-4 px-4 pt-5 pb-8 sm:px-6 sm:py-6">
@@ -187,6 +217,7 @@ function VerifyNumber({
   expired: boolean
   onVerified: (auth: Auth) => void
 }) {
+  const { t } = useT()
   const sendOtp = useSendOtp()
   const verifyOtp = useVerifyOtp()
   const [country, setCountry] = React.useState<string>(DEFAULT_COUNTRY_CODE)
@@ -203,8 +234,8 @@ function VerifyNumber({
 
   const send = () => {
     const problem = mobile
-      ? mobileError(mobile, country)
-      : "Enter the contact number"
+      ? mobileError(mobile, country, t)
+      : t("Enter the contact number")
     setNumberError(problem)
     if (problem || !e164) return
     sendOtp.mutate(e164, {
@@ -241,11 +272,12 @@ function VerifyNumber({
     >
       {expired && (
         <p className="rounded-md bg-amber-500/10 px-3 py-2 text-2xs/relaxed text-amber-800 dark:text-amber-300">
-          Your verification ran out before saving. Verify your number again —
-          the changes you made are kept on this device.
+          {t(
+            "Your verification ran out before saving. Verify your number again — the changes you made are kept on this device."
+          )}
         </p>
       )}
-      <Field label="Contact mobile number" required error={numberError}>
+      <Field label={t("Contact mobile number")} required error={numberError}>
         <PhoneInput
           id="edit-mobile"
           countryCode={country}
@@ -268,26 +300,37 @@ function VerifyNumber({
       {sentTo && sentTo === e164 ? (
         <div className="flex flex-col gap-2">
           <p className="text-2xs/relaxed text-muted-foreground">
-            Enter the code sent on WhatsApp to{" "}
-            <span className="font-medium text-foreground tabular-nums">
-              {formatMobile(sentTo)}
-            </span>
-            .
+            {(() => {
+              const [before, after] = t(
+                "Enter the code sent on WhatsApp to {mobile}."
+              ).split("{mobile}")
+              return (
+                <>
+                  {before}
+                  <span className="font-medium text-foreground tabular-nums">
+                    {formatMobile(sentTo)}
+                  </span>
+                  {after}
+                </>
+              )
+            })()}
           </p>
           <div className="flex items-stretch gap-2">
             <Input
               id="edit-otp"
               inputMode="numeric"
               autoComplete="one-time-code"
-              placeholder="6-digit code"
+              placeholder={t("6-digit code")}
               maxLength={6}
               value={code}
-              aria-label="Verification code"
+              aria-label={t("Verification code")}
               aria-invalid={!!verifyOtp.error}
               className="max-w-40 tracking-[0.3em] tabular-nums placeholder:tracking-normal"
               autoFocus
               onChange={(event) => {
-                const digits = event.target.value.replace(/\D/g, "").slice(0, 6)
+                const digits = asciiDigits(event.target.value)
+                  .replace(/\D/g, "")
+                  .slice(0, 6)
                 setCode(digits)
                 verifyOtp.reset()
                 if (digits.length === 6) verify(digits)
@@ -301,7 +344,7 @@ function VerifyNumber({
               {verifyOtp.isPending && (
                 <RiLoader4Line className="animate-spin" />
               )}
-              Verify
+              {t("Verify")}
             </Button>
           </div>
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-2xs/relaxed">
@@ -311,11 +354,9 @@ function VerifyNumber({
               disabled={sendOtp.isPending}
               className="text-primary hover:underline"
             >
-              Resend code
+              {t("Resend code")}
             </button>
-            {devCode && (
-              <DevCodeNote code={devCode} />
-            )}
+            {devCode && <DevCodeNote code={devCode} />}
           </div>
         </div>
       ) : (
@@ -330,12 +371,14 @@ function VerifyNumber({
           ) : (
             <RiWhatsappLine />
           )}
-          Send code on WhatsApp
+          {t("Send code on WhatsApp")}
         </Button>
       )}
 
       {error && (
-        <p className="text-2xs/relaxed text-destructive">{error.message}</p>
+        <p className="text-2xs/relaxed text-destructive">
+          {serverMessage(t, error.message)}
+        </p>
       )}
     </form>
   )

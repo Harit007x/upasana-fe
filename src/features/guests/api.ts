@@ -57,10 +57,17 @@ const keys = {
   detail: (id: string) => ["guests", id] as const,
 }
 
-export function useGuestVisits() {
+/** `enabled: false` holds off loading until a screen needs them (Reports, for a meal count). */
+/** Every entry the caller may see. Also loaded outside a hook (the Assistant). */
+export const guestVisitsQuery = {
+  queryKey: keys.all,
+  queryFn: () => api.get<GuestVisit[]>("/guests"),
+}
+
+export function useGuestVisits({ enabled = true }: { enabled?: boolean } = {}) {
   return useQuery({
-    queryKey: keys.all,
-    queryFn: () => api.get<GuestVisit[]>("/guests"),
+    ...guestVisitsQuery,
+    enabled,
   })
 }
 

@@ -36,10 +36,15 @@ const ACCOMMODATION = ["accommodation"] as const
  * `poll`: refetch every so often — for screens volunteers keep open while
  * others register and confirm people (the Accommodation screen).
  */
+/** Every registration the caller may see. Also loaded outside a hook (the Assistant). */
+export const registrationsQuery = {
+  queryKey: keys.all,
+  queryFn: () => api.get<Registration[]>("/registrations"),
+}
+
 export function useRegistrations({ poll }: { poll?: boolean } = {}) {
   return useQuery({
-    queryKey: keys.all,
-    queryFn: () => api.get<Registration[]>("/registrations"),
+    ...registrationsQuery,
     refetchInterval: poll ? 30_000 : undefined,
   })
 }

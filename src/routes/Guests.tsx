@@ -1,14 +1,10 @@
 import {
-  RiCheckLine,
   RiDeleteBinLine,
   RiDownload2Line,
-  RiExternalLinkLine,
-  RiFileCopyLine,
   RiLoader4Line,
   RiPencilLine,
   RiSearchLine,
   RiUserAddLine,
-  RiWhatsappLine,
 } from "@remixicon/react"
 import { cn } from "cn"
 import * as React from "react"
@@ -16,6 +12,7 @@ import { Link, useSearchParams } from "react-router"
 
 import { PageHeader } from "@/components/layout/AppShell"
 import { LoadError } from "@/components/LoadError"
+import { ShareLink } from "@/components/ShareLink"
 import { Button, buttonVariants } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge, Card, EmptyState, Skeleton } from "@/components/ui/primitives"
@@ -39,61 +36,6 @@ import { canReview, useSession } from "@/lib/auth-client"
 import { formatMobile } from "@/lib/phone"
 
 const number = new Intl.NumberFormat("en-IN")
-
-/** The public form hosts are sent to. */
-const publicUrl = () => `${window.location.origin}/guests/register`
-
-/** Copy, WhatsApp and open: the ways the team hands the link to a host. */
-function ShareLink() {
-  const [copied, setCopied] = React.useState(false)
-  const copy = async () => {
-    try {
-      await navigator.clipboard.writeText(publicUrl())
-      setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
-    } catch {
-      // Clipboard refused (an http page, or permission denied): the link is
-      // still one click away through "Open".
-    }
-  }
-  const whatsappText = `${EVENT.name} — bringing friends or family for a day? Tell us whose guests they are, which days, how many, and whether they take mahaprasad:\n${publicUrl()}`
-
-  return (
-    <div className="flex flex-col gap-3 rounded-lg border border-border bg-card p-4 sm:flex-row sm:items-center sm:justify-between">
-      <div className="flex min-w-0 flex-col gap-0.5">
-        <span className="text-xs/relaxed font-medium">Guest form link</span>
-        <span className="text-2xs/relaxed break-all text-muted-foreground">
-          Share it only with the devotees who are bringing guests. No sign-in
-          needed. {publicUrl()}
-        </span>
-      </div>
-      <div className="flex flex-wrap items-center gap-2">
-        <Button variant="outline" size="lg" onClick={copy}>
-          {copied ? <RiCheckLine /> : <RiFileCopyLine />}
-          {copied ? "Copied" : "Copy link"}
-        </Button>
-        <a
-          href={`https://wa.me/?text=${encodeURIComponent(whatsappText)}`}
-          target="_blank"
-          rel="noreferrer"
-          className={buttonVariants({ variant: "outline", size: "lg" })}
-        >
-          <RiWhatsappLine />
-          Share
-        </a>
-        <a
-          href="/guests/register"
-          target="_blank"
-          rel="noreferrer"
-          aria-label="Open the guest form"
-          className={buttonVariants({ variant: "outline", size: "icon-lg" })}
-        >
-          <RiExternalLinkLine />
-        </a>
-      </div>
-    </div>
-  )
-}
 
 /** People, lunches and dinners per day. A day can be tapped to list only its guests. */
 function DayTotals({
@@ -389,7 +331,13 @@ export function Guests() {
   return (
     <>
       {header}
-      <ShareLink />
+      <ShareLink
+        title="Guest form link"
+        description="Share it only with the devotees who are bringing guests. No sign-in needed."
+        path="/guests/register"
+        whatsappText={`${EVENT.name} — bringing friends or family for a day? Tell us whose guests they are, which days, how many, and whether they take mahaprasad:`}
+        openLabel="Open the guest form"
+      />
 
       {isPending ? (
         <>

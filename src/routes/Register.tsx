@@ -6,6 +6,8 @@ import { Button } from "@/components/ui/button"
 import { RegistrationConfirmation } from "@/features/registrations/components"
 import { RegistrationForm } from "@/features/registrations/form/RegistrationForm"
 import type { Registration } from "@/features/registrations/types"
+import { useT } from "@/i18n/context"
+import { LanguagePicker, LanguageProvider } from "@/i18n/LanguageProvider"
 
 /**
  * The public registration page devotees open from a shared link. No sign-in:
@@ -13,22 +15,38 @@ import type { Registration } from "@/features/registrations/types"
  * registration ends up on a paper slip instead.
  */
 export function Register() {
+  return (
+    <LanguageProvider>
+      <RegisterPage />
+    </LanguageProvider>
+  )
+}
+
+/** Most devotees read Gujarati first: the page offers it at the top. */
+function RegisterPage() {
+  const { t } = useT()
   const [, setParams] = useSearchParams()
   const [saved, setSaved] = React.useState<Registration>()
   const [formKey, setFormKey] = React.useState(0)
 
   return (
     <div className="flex min-h-svh flex-col">
-      <PublicHeader eyebrow="Registration open">
+      <PublicHeader
+        eyebrow={t("Registration open")}
+        action={<LanguagePicker />}
+      >
         <p className="max-w-prose text-xs/relaxed text-muted-foreground">
-          Register yourself or your family. Add every person who is coming,
-          including children, so the hosts can plan meals, seating and stay for
-          everyone.
+          {t(
+            "Register yourself or your family. Add every person who is coming, including children, so the hosts can plan meals, seating and stay for everyone."
+          )}
         </p>
         <p className="text-xs/relaxed text-muted-foreground">
-          Already registered?{" "}
-          <Link to="/register/edit" className="font-medium text-primary hover:underline">
-            Update your registration
+          {t("Already registered?")}{" "}
+          <Link
+            to="/register/edit"
+            className="font-medium text-primary hover:underline"
+          >
+            {t("Update your registration")}
           </Link>
         </p>
       </PublicHeader>
@@ -47,12 +65,16 @@ export function Register() {
                   setParams({}, { replace: true })
                 }}
               >
-                Register another person or family
+                {t("Register another person or family")}
               </Button>
             }
           />
         ) : (
-          <RegistrationForm key={formKey} source="self" onRegistered={setSaved} />
+          <RegistrationForm
+            key={formKey}
+            source="self"
+            onRegistered={setSaved}
+          />
         )}
       </main>
     </div>

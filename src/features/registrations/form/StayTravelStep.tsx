@@ -1,28 +1,30 @@
 import * as React from "react"
 import {
-  RiCheckLine,
   RiCheckboxCircleFill,
   RiEraserLine,
   RiFileCopyLine,
   RiHotelBedLine,
 } from "@remixicon/react"
 import { cn } from "cn"
-import { Controller, get, useFormContext } from "react-hook-form"
+import { Controller, useFormContext } from "react-hook-form"
 
 import { Button } from "@/components/ui/button"
 import { Checkbox, ChoiceGroup } from "@/components/ui/choice"
-import { DigitsInput, Field, Input, RequiredMark } from "@/components/ui/input"
+import { TimePicker } from "@/components/ui/date-time"
+import { DigitsInput, Field, Input } from "@/components/ui/input"
 import { NativeSelect } from "@/components/ui/select"
 import {
   EVENT,
   STAY_DATES,
   TIME_SLOTS,
+  TRAIN_STATIONS,
   formatStayDate,
   isLocalMandal,
   mealOf,
   type StayDate,
   type TimeSlot,
 } from "@/config/event"
+import { useT } from "@/i18n/context"
 
 import { TravelModeIcon } from "../components"
 import { compareStay, isPresentOn, nightsBetween } from "../stay"
@@ -32,12 +34,22 @@ import {
   isSameDayFor,
   isSameDayVisit,
   maxVehicles,
+  offersPickup,
+  DROP_MODES,
   TRAVEL_CHOICES,
+  type DropMode,
   vehicleSlots,
   type RegistrationFormValues,
 } from "./schema"
+import { YesNoQuestion } from "./YesNoQuestion"
 
-const TRAVEL_DESCRIPTIONS: Record<Exclude<TravelMode, "local">, string> = {
+const DROP_DESCRIPTIONS: Record<DropMode, string> = {
+  train: "From an Ahmedabad station.",
+  public_bus: "From an Ahmedabad bus stand.",
+  flight: "From Ahmedabad airport.",
+}
+
+const TRAVEL_DESCRIPTIONS: Record<(typeof TRAVEL_CHOICES)[number], string> = {
   personal_vehicle: "Car or two-wheeler. Parking is on site.",
   mandal_bus: "Bus arranged by your mandal.",
   train: "Arriving at Ahmedabad Junction.",
@@ -48,8 +60,7 @@ const TRAVEL_DESCRIPTIONS: Record<Exclude<TravelMode, "local">, string> = {
 
 /**
  * "Will you take breakfast?" for someone arriving or leaving in a slot with a
- * meal, so the kitchen can count. Required: Yes or No, each a pill with a
- * tick box.
+ * meal, so the kitchen can count. Required.
  */
 function MealQuestion({
   name,
@@ -62,69 +73,142 @@ function MealQuestion({
     | `members.${number}.departureMeal`
   meal: string
 }) {
+  const { t } = useT()
+  return (
+    <YesNoQuestion
+      name={name}
+      question={t("Will you take {meal}?", { meal: t(meal) })}
+      required
+    />
+  )
+}
+
+/**
+ * The train, bus or flight into Ahmedabad (for a pickup) or out of it (for
+ * a drop): the train's number, name and station, the bus's operator and
+ * stop, or the flight number; and the time. All required once the pickup or drop is wanted.
+ */
+function Journey({
+  mode,
+  leg,
+}: {
+  mode: DropMode
+  leg: "arrival" | "departure"
+}) {
   const {
+    control,
     register,
-    watch,
     formState: { errors },
   } = useFormContext<RegistrationFormValues>()
-  const error: string | undefined = get(errors, name)?.message
-  const picked = watch(name)
+  const { t } = useT()
+  const arriving = leg === "arrival"
+  const names = arriving
+    ? ({
+        reference: "travelReference",
+        station: "travelStation",
+        time: "travelTime",
+      } as const)
+    : ({
+        reference: "dropReference",
+        station: "dropStation",
+        time: "dropTime",
+      } as const)
+  const timeLabel = arriving ? t("Arrival time") : t("Departure time")
+  const referenceError = errors[names.reference]?.message
+  const stationError = errors[names.station]?.message
+  const timeError = errors[names.time]?.message
+
+  const time = (
+    <Field label={timeLabel} required error={timeError}>
+      <Controller
+        control={control}
+        name={names.time}
+        render={({ field }) => (
+          <TimePicker
+            id={names.time}
+            aria-label={`${t(TRAVEL_MODES[mode])} ${timeLabel.toLowerCase()}`}
+            value={field.value}
+            onChange={field.onChange}
+            invalid={!!timeError}
+          />
+        )}
+      />
+    </Field>
+  )
+
+  if (mode === "flight") {
+    return (
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
+        <Field label={t("Flight number")} required error={referenceError}>
+          <Input
+            id={names.reference}
+            aria-invalid={!!referenceError}
+            placeholder={arriving ? "6E 2131" : "6E 2132"}
+            autoComplete="off"
+            className="uppercase placeholder:normal-case"
+            {...register(names.reference)}
+          />
+        </Field>
+        {time}
+      </div>
+    )
+  }
+
+  if (mode === "public_bus") {
+    return (
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
+        <Field label={t("Bus details")} required error={referenceError}>
+          <Input
+            id={names.reference}
+            aria-invalid={!!referenceError}
+            placeholder={
+              arriving
+                ? t("GSRTC Volvo from Rajkot, reaching Geeta Mandir")
+                : t("GSRTC Volvo to Rajkot, from Geeta Mandir")
+            }
+            {...register(names.reference)}
+          />
+        </Field>
+        {time}
+      </div>
+    )
+  }
 
   return (
-    <div className="flex flex-col gap-1">
-      <div
-        role="radiogroup"
-        aria-label={`Will you take ${meal}?`}
-        aria-invalid={!!error || undefined}
-        // Always two rows — the question, then Yes and No under it — so the
-        // arriving and leaving boxes look the same whatever the meal's name.
-        className="flex flex-col items-start gap-1.5 rounded-md bg-muted/60 px-3 py-2"
-      >
-        <span className="text-xs/relaxed">
-          Will you take {meal}?
-          <RequiredMark />
-        </span>
-        <div className="flex gap-1">
-          {(["yes", "no"] as const).map((answer) => {
-            const checked = picked === answer
-            return (
-              <label
-                key={answer}
-                className={cn(
-                  "flex cursor-pointer items-center gap-1.5 rounded-md border bg-background py-1 pr-3 pl-2 text-xs/relaxed transition-colors select-none sm:py-0.5",
-                  "hover:bg-muted has-focus-visible:ring-2 has-focus-visible:ring-ring/30",
-                  checked
-                    ? "border-primary bg-primary/10 text-primary hover:bg-primary/10"
-                    : error
-                      ? "border-destructive/60"
-                      : "border-border"
-                )}
-              >
-                <input
-                  type="radio"
-                  value={answer}
-                  className="sr-only"
-                  {...register(name)}
-                />
-                {/* A tick box inside the pill, filled once it is picked. */}
-                <span
-                  aria-hidden
-                  className={cn(
-                    "flex size-4 shrink-0 items-center justify-center rounded-sm border transition-colors sm:size-3.5",
-                    checked
-                      ? "border-primary bg-primary text-primary-foreground"
-                      : "border-muted-foreground/40 bg-background"
-                  )}
-                >
-                  {checked && <RiCheckLine className="size-3 sm:size-2.5" />}
-                </span>
-                {answer === "yes" ? "Yes" : "No"}
-              </label>
-            )
-          })}
-        </div>
+    <div className="flex flex-col gap-4">
+      <Field label={t("Train number and name")} required error={referenceError}>
+        <Input
+          id={names.reference}
+          aria-invalid={!!referenceError}
+          placeholder={arriving ? "12009 Shatabdi Exp" : "12010 Shatabdi Exp"}
+          {...register(names.reference)}
+        />
+      </Field>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
+        <Field
+          label={
+            arriving ? t("Arriving at station") : t("Leaving from station")
+          }
+          required
+          error={stationError}
+        >
+          <NativeSelect
+            id={names.station}
+            aria-invalid={!!stationError}
+            {...register(names.station)}
+          >
+            <option value="" disabled>
+              {t("Select station")}
+            </option>
+            {TRAIN_STATIONS.map((station) => (
+              <option key={station} value={station}>
+                {t(station)}
+              </option>
+            ))}
+          </NativeSelect>
+        </Field>
+        {time}
       </div>
-      {error && <p className="text-2xs/relaxed text-destructive">{error}</p>}
     </div>
   )
 }
@@ -147,6 +231,7 @@ function StayPicker({
   error?: string
 }) {
   const { register, watch, setValue } = useFormContext<RegistrationFormValues>()
+  const { t, lang } = useT()
   const dateName = `${prefix}Date` as const
   const slotName = `${prefix}Slot` as const
   const mealName = `${prefix}Meal` as const
@@ -158,22 +243,22 @@ function StayPicker({
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
           <NativeSelect
             id={dateName}
-            aria-label={`${label} day`}
+            aria-label={`${label} – ${t("Day")}`}
             aria-invalid={!!error}
             {...register(dateName)}
           >
             <option value="" disabled>
-              Day
+              {t("Day")}
             </option>
             {STAY_DATES.map((date) => (
               <option key={date} value={date}>
-                {formatStayDate(date)}
+                {formatStayDate(date, lang)}
               </option>
             ))}
           </NativeSelect>
           <NativeSelect
             id={slotName}
-            aria-label={`${label} time`}
+            aria-label={`${label} – ${t("Time")}`}
             aria-invalid={!!error}
             {...register(slotName, {
               // A yes to breakfast is not a yes to lunch: a new time asks again.
@@ -181,11 +266,11 @@ function StayPicker({
             })}
           >
             <option value="" disabled>
-              Time
+              {t("Time")}
             </option>
             {Object.entries(TIME_SLOTS).map(([value, slotLabel]) => (
               <option key={value} value={value}>
-                {slotLabel}
+                {t(slotLabel)}
               </option>
             ))}
           </NativeSelect>
@@ -206,6 +291,7 @@ export function StayTravelStep() {
     setValue,
     formState: { errors },
   } = useFormContext<RegistrationFormValues>()
+  const { t, lang } = useT()
 
   const members = watch("members")
   const sameSchedule = watch("sameSchedule")
@@ -213,7 +299,25 @@ export function StayTravelStep() {
   const [registrationType, vehicleCount] = watch(["type", "vehicleCount"])
   // Someone registering alone speaks for themselves: "I need", not "We need".
   const alone = registrationType === "individual"
-  const weNeed = alone ? "I need" : "We need"
+  // Train and public bus: a required Yes or No, asked before anything else
+  // about the journey; the details follow only a Yes.
+  const wantsPickup = watch("needsPickup") === "yes"
+  const wantsDrop = wantsPickup && watch("needsDrop")
+  const dropMode = watch("dropMode")
+  const pickupQuestion = (
+    <YesNoQuestion
+      name="needsPickup"
+      required
+      question={t("Do you need a pickup in Ahmedabad?")}
+      description={
+        alone
+          ? t("If yes, the transport team will contact you a day before.")
+          : t(
+              "If yes, the transport team will contact the primary contact a day before."
+            )
+      }
+    />
+  )
   // A nearby mandal: travel and stay are not asked (see isLocalMandal).
   const mandal = watch("mandal")
   const local = isLocalMandal(mandal)
@@ -383,10 +487,15 @@ export function StayTravelStep() {
     <div className="flex flex-col gap-6">
       <section className="flex flex-col gap-4">
         <div className="flex flex-col gap-1">
-          <h3 className="font-heading text-sm font-medium">Dates</h3>
+          <h3 className="font-heading text-sm font-medium">{t("Dates")}</h3>
           <p className="text-xs/relaxed text-muted-foreground">
-            The event runs {formatStayDate(EVENT.days[0]).split(" · ")[0]} to{" "}
-            {formatStayDate(EVENT.days[EVENT.days.length - 1]).split(" · ")[0]}.
+            {t("The event runs {first} to {last}.", {
+              first: formatStayDate(EVENT.days[0], lang).split(" · ")[0],
+              last: formatStayDate(
+                EVENT.days[EVENT.days.length - 1],
+                lang
+              ).split(" · ")[0],
+            })}
           </p>
         </div>
 
@@ -394,8 +503,10 @@ export function StayTravelStep() {
         {members.length > 1 && (
           <Checkbox
             id="sameSchedule"
-            label="Everyone arrives and leaves together"
-            description="Untick if someone in the party comes later or leaves earlier."
+            label={t("Everyone arrives and leaves together")}
+            description={t(
+              "Untick if someone in the party comes later or leaves earlier."
+            )}
             {...register("sameSchedule", { onChange: onSameScheduleChange })}
           />
         )}
@@ -405,20 +516,23 @@ export function StayTravelStep() {
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <StayPicker
                 prefix="arrival"
-                label="Arriving"
+                label={t("Arriving")}
                 error={arrivalError}
               />
               <StayPicker
                 prefix="departure"
-                label="Leaving"
+                label={t("Leaving")}
                 error={departureError}
               />
             </div>
 
             {validRange && (
               <p className="text-xs/relaxed text-muted-foreground tabular-nums">
-                {nightsBetween(arrival, departure)} nights · attending{" "}
-                {eventDays} of {EVENT.days.length} event days
+                {t("{nights} nights · attending {days} of {total} event days", {
+                  nights: nightsBetween(arrival, departure),
+                  days: eventDays,
+                  total: EVENT.days.length,
+                })}
               </p>
             )}
           </>
@@ -438,7 +552,7 @@ export function StayTravelStep() {
                 >
                   <div className="flex min-h-6 items-center justify-between gap-2">
                     <p className="text-xs/relaxed font-medium">
-                      {member.fullName || `Person ${index + 1}`}
+                      {member.fullName || t("Person {n}", { n: index + 1 })}
                     </p>
                     {/* Shows on hover with a mouse; always on touch screens,
                         which have no hover. "Clear" once this person has any
@@ -454,25 +568,33 @@ export function StayTravelStep() {
                         }
                         title={
                           filled
-                            ? `Clear ${member.fullName || `person ${index + 1}`}'s arriving and leaving`
-                            : `Copy ${above?.fullName || `person ${index}`}'s arriving and leaving`
+                            ? t("Clear {name}'s arriving and leaving", {
+                                name:
+                                  member.fullName ||
+                                  t("person {n}", { n: index + 1 }),
+                              })
+                            : t("Copy {name}'s arriving and leaving", {
+                                name:
+                                  above?.fullName ||
+                                  t("person {n}", { n: index }),
+                              })
                         }
                         className="text-muted-foreground opacity-0 transition-opacity group-hover/person:opacity-100 focus-visible:opacity-100 pointer-coarse:opacity-100"
                       >
                         {filled ? <RiEraserLine /> : <RiFileCopyLine />}
-                        {filled ? "Clear" : "Same as above"}
+                        {filled ? t("Clear") : t("Same as above")}
                       </Button>
                     )}
                   </div>
                   <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                     <StayPicker
                       prefix={`members.${index}.arrival`}
-                      label="Arriving"
+                      label={t("Arriving")}
                       error={memberErrors?.arrivalDate?.message}
                     />
                     <StayPicker
                       prefix={`members.${index}.departure`}
-                      label="Leaving"
+                      label={t("Leaving")}
                       error={memberErrors?.departureDate?.message}
                     />
                   </div>
@@ -486,18 +608,23 @@ export function StayTravelStep() {
       {/* Locals come and go from home: no travel or stay to ask about. */}
       {local ? (
         <p className="rounded-md bg-muted px-3 py-2 text-xs/relaxed text-muted-foreground">
-          {mandal} is close by, so travel and accommodation are not needed.
+          {t(
+            "{mandal} is close by, so travel and accommodation are not needed.",
+            {
+              mandal: t(mandal),
+            }
+          )}
         </p>
       ) : (
         <>
           <section className="flex flex-col gap-4">
-            <h3 className="font-heading text-sm font-medium">Travel</h3>
+            <h3 className="font-heading text-sm font-medium">{t("Travel")}</h3>
             <Controller
               control={control}
               name="travelMode"
               render={({ field, fieldState }) => (
                 <Field
-                  label="How are you travelling?"
+                  label={t("How are you travelling?")}
                   required
                   error={fieldState.error?.message}
                 >
@@ -509,8 +636,8 @@ export function StayTravelStep() {
                     className="grid-cols-1 sm:grid-cols-2 lg:grid-cols-3"
                     options={TRAVEL_CHOICES.map((mode) => ({
                       value: mode,
-                      label: TRAVEL_MODES[mode],
-                      description: TRAVEL_DESCRIPTIONS[mode],
+                      label: t(TRAVEL_MODES[mode]),
+                      description: t(TRAVEL_DESCRIPTIONS[mode]),
                       icon: <TravelModeIcon mode={mode} />,
                     }))}
                   />
@@ -523,8 +650,11 @@ export function StayTravelStep() {
                 {/* One person, one vehicle: only a family is asked how many. */}
                 {asksVehicleCount && (
                   <Field
-                    label="Number of vehicles"
-                    hint={`Up to ${vehicleLimit} for ${members.length} people.`}
+                    label={t("Number of vehicles")}
+                    hint={t("Up to {max} for {people} people.", {
+                      max: vehicleLimit,
+                      people: members.length,
+                    })}
                     error={errors.vehicleCount?.message}
                     className="sm:max-w-48"
                   >
@@ -543,18 +673,19 @@ export function StayTravelStep() {
                   <div className="flex flex-col gap-0.5">
                     <span className="text-xs/relaxed font-medium">
                       {vehicles === 1
-                        ? "Vehicle number (optional)"
-                        : "Vehicle numbers (optional)"}
+                        ? t("Vehicle number (optional)")
+                        : t("Vehicle numbers (optional)")}
                     </span>
                     <span className="text-2xs/relaxed text-muted-foreground">
-                      For the parking passes. Leave blank if you do not know
-                      them yet.
+                      {t(
+                        "For the parking passes. Leave blank if you do not know them yet."
+                      )}
                     </span>
                   </div>
                   {vehicles === 1 ? (
                     // One vehicle: the heading above already names the box.
                     <div className="flex flex-col gap-1.5 sm:max-w-sm">
-                      {vehicleNumberInput(0, "Vehicle number")}
+                      {vehicleNumberInput(0, t("Vehicle number"))}
                       {errors.vehicleNumbers?.[0] && (
                         <p className="text-2xs/relaxed text-destructive">
                           {errors.vehicleNumbers[0].message}
@@ -566,7 +697,7 @@ export function StayTravelStep() {
                       {Array.from({ length: vehicles }, (_, index) => (
                         <Field
                           key={index}
-                          label={`Vehicle ${index + 1}`}
+                          label={t("Vehicle {n}", { n: index + 1 })}
                           error={errors.vehicleNumbers?.[index]?.message}
                         >
                           {vehicleNumberInput(index)}
@@ -578,55 +709,67 @@ export function StayTravelStep() {
               </div>
             )}
 
-            {(travelMode === "train" || travelMode === "flight") && (
+            {offersPickup(travelMode) && (
               <div className="flex flex-col gap-4">
-                <Field
-                  label={
-                    travelMode === "train"
-                      ? "Train number and name (optional)"
-                      : "Flight number (optional)"
-                  }
-                >
-                  <Input
-                    id="travelReference"
-                    placeholder={
-                      travelMode === "train" ? "12009 Shatabdi Exp" : "6E 2131"
-                    }
-                    {...register("travelReference")}
-                  />
-                </Field>
-                <Checkbox
-                  id="needsPickup"
-                  label={
-                    travelMode === "train"
-                      ? `${weNeed} pickup from Ahmedabad Junction`
-                      : `${weNeed} pickup from the airport`
-                  }
-                  description={`The transport team will contact ${alone ? "you" : "the primary contact"} a day before.`}
-                  {...register("needsPickup")}
-                />
-                <Checkbox
-                  id="needsDrop"
-                  label={
-                    travelMode === "train"
-                      ? `${weNeed} a drop to Ahmedabad Junction when leaving`
-                      : `${weNeed} a drop to the airport when leaving`
-                  }
-                  description="Arranged for the departure day and time above."
-                  {...register("needsDrop")}
-                />
+                {pickupQuestion}
+                {/* What the transport team needs for the pickup, asked only once it is wanted. */}
+                {wantsPickup && <Journey mode={travelMode} leg="arrival" />}
+                {/* A drop is offered only to those who are also picked up. */}
+                {wantsPickup && (
+                  <>
+                    <Checkbox
+                      id="needsDrop"
+                      label={
+                        alone
+                          ? t("I need a drop when leaving")
+                          : t("We need a drop when leaving")
+                      }
+                      description={t(
+                        "To the station, bus stand or airport, in time for your journey home."
+                      )}
+                      {...register("needsDrop")}
+                    />
+                    {/* Leaving may not be the way they came: asked, then its details. */}
+                    {wantsDrop && (
+                      <Controller
+                        control={control}
+                        name="dropMode"
+                        render={({ field, fieldState }) => (
+                          <Field
+                            label={t("How are you leaving?")}
+                            required
+                            error={fieldState.error?.message}
+                          >
+                            <ChoiceGroup
+                              name={field.name}
+                              value={field.value as DropMode | ""}
+                              onChange={field.onChange}
+                              invalid={!!fieldState.error}
+                              className="grid-cols-1 sm:grid-cols-3"
+                              options={DROP_MODES.map((mode) => ({
+                                value: mode,
+                                label: t(TRAVEL_MODES[mode]),
+                                description: t(DROP_DESCRIPTIONS[mode]),
+                                icon: <TravelModeIcon mode={mode} />,
+                              }))}
+                            />
+                          </Field>
+                        )}
+                      />
+                    )}
+                    {wantsDrop && offersPickup(dropMode) && (
+                      <Journey mode={dropMode} leg="departure" />
+                    )}
+                  </>
+                )}
               </div>
             )}
 
-            {(travelMode === "public_bus" || travelMode === "other") && (
-              <Field label="Details (optional)">
+            {travelMode === "other" && (
+              <Field label={t("Details (optional)")}>
                 <Input
                   id="travelReference"
-                  placeholder={
-                    travelMode === "public_bus"
-                      ? "GSRTC Volvo from Rajkot"
-                      : "How are you travelling?"
-                  }
+                  placeholder={t("How are you travelling?")}
                   {...register("travelReference")}
                 />
               </Field>
@@ -634,26 +777,36 @@ export function StayTravelStep() {
 
             {travelMode === "mandal_bus" && (
               <p className="rounded-md bg-muted px-3 py-2 text-xs/relaxed text-muted-foreground">
-                Your mandal coordinator shares the bus timing and pickup point.
+                {t(
+                  "Your mandal coordinator shares the bus timing and pickup point."
+                )}
               </p>
             )}
           </section>
 
           <section className="flex flex-col gap-3">
-            <h3 className="font-heading text-sm font-medium">Stay</h3>
+            <h3 className="font-heading text-sm font-medium">{t("Stay")}</h3>
             <Checkbox
               id="accommodationRequired"
               label={
                 party
-                  ? `${weNeed} accommodation for everyone`
-                  : `${weNeed} accommodation from Mandir`
+                  ? t("We need accommodation for everyone")
+                  : alone
+                    ? t("I need accommodation from Mandir")
+                    : t("We need accommodation from Mandir")
               }
               description={
                 sameDay
-                  ? "Not needed — you arrive and leave on the same day, so there is no night's stay."
+                  ? t(
+                      "Not needed — you arrive and leave on the same day, so there is no night's stay."
+                    )
                   : party
-                    ? "Untick if only some of you need it. The accommodation team allots rooms or dormitory beds after registration closes."
-                    : "The accommodation team allots rooms or dormitory beds after registration closes."
+                    ? t(
+                        "Untick if only some of you need it. The accommodation team allots rooms or dormitory beds after registration closes."
+                      )
+                    : t(
+                        "The accommodation team allots rooms or dormitory beds after registration closes."
+                      )
               }
               disabled={sameDay}
               {...register("accommodationRequired", {
@@ -669,12 +822,12 @@ export function StayTravelStep() {
                 <div className="flex flex-col gap-0.5">
                   <p className="text-xs/relaxed font-medium">
                     {forEveryone
-                      ? "Accommodation for"
-                      : "Who needs accommodation?"}
+                      ? t("Accommodation for")
+                      : t("Who needs accommodation?")}
                   </p>
                   {!forEveryone && (
                     <p className="text-2xs/relaxed text-muted-foreground">
-                      Leave everyone unticked if nobody does.
+                      {t("Leave everyone unticked if nobody does.")}
                     </p>
                   )}
                 </div>
@@ -699,12 +852,14 @@ export function StayTravelStep() {
                               noNight ? "text-muted-foreground" : "text-primary"
                             )}
                           />
-                          {member.fullName || `Person ${index + 1}`}
+                          {member.fullName || t("Person {n}", { n: index + 1 })}
                           {noNight ? (
-                            <span className="pr-0.5">· same day, no night</span>
+                            <span className="pr-0.5">
+                              · {t("same day, no night")}
+                            </span>
                           ) : (
                             <RiCheckboxCircleFill
-                              aria-label="has a bed coming"
+                              aria-label={t("has a bed coming")}
                               className="size-3.5 shrink-0 text-primary"
                             />
                           )}
@@ -719,10 +874,14 @@ export function StayTravelStep() {
                       <Checkbox
                         key={index}
                         id={`members.${index}.needsAccommodation`}
-                        label={member.fullName || `Person ${index + 1}`}
+                        label={
+                          member.fullName || t("Person {n}", { n: index + 1 })
+                        }
                         description={
                           noNight
-                            ? "Arrives and leaves the same day — no night's stay"
+                            ? t(
+                                "Arrives and leaves the same day — no night's stay"
+                              )
                             : undefined
                         }
                         disabled={noNight}

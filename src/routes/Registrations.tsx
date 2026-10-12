@@ -10,11 +10,12 @@ import { Link, useNavigate, useSearchParams } from "react-router"
 
 import { PageHeader } from "@/components/layout/AppShell"
 import { LoadError } from "@/components/LoadError"
+import { ShareLink } from "@/components/ShareLink"
 import { Button, buttonVariants } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge, EmptyState, Skeleton } from "@/components/ui/primitives"
 import { NativeSelect } from "@/components/ui/select"
-import { MANDALS, NO_MANDAL, formatDay } from "@/config/event"
+import { EVENT, MANDALS, NO_MANDAL, formatDay } from "@/config/event"
 import { useRegistrations } from "@/features/registrations/api"
 import {
   StatusBadge,
@@ -30,6 +31,7 @@ import { SampleDataToggle } from "@/features/registrations/SampleDataToggle"
 import { wantsBed } from "@/features/registrations/stay"
 import { isAdmin, useSession } from "@/lib/auth-client"
 import { formatMobile } from "@/lib/phone"
+import { formatTime } from "@/lib/time"
 import {
   GENDERS,
   REGISTRATION_STATUSES,
@@ -78,12 +80,19 @@ function downloadCsv(registrations: Registration[]) {
     "Departure meal",
     "Travel",
     "Vehicle numbers",
+    "Station",
+    "Pickup arrival time",
     "Pickup",
     "Drop",
+    "Leaving by",
+    "Journey home",
+    "Leaving from",
+    "Journey home time",
     "AMD pickup",
-    "AMD drop",
+    "AMD flight out",
     "Accommodation",
     "Assistance",
+    "Youth Convention",
     "Number confirmed",
   ]
   const rows = registrations.flatMap((r) =>
@@ -106,14 +115,25 @@ function downloadCsv(registrations: Registration[]) {
       formatMeal(m.departure),
       TRAVEL_MODES[r.travel.mode],
       (r.travel.vehicleNumbers ?? []).join("; "),
+      r.travel.station ?? "",
+      r.travel.arrivalTime ? formatTime(r.travel.arrivalTime) : "",
       r.travel.needsPickup ? "Yes" : "",
       r.travel.needsDrop ? "Yes" : "",
+      r.travel.departureMode ? TRAVEL_MODES[r.travel.departureMode] : "",
+      r.travel.departureReference ?? "",
+      r.travel.departureStation ?? "",
+      r.travel.departureTime ? formatTime(r.travel.departureTime) : "",
       r.indiaTravel?.arrival ? formatIndiaFlight(r.indiaTravel.arrival) : "",
       r.indiaTravel?.departure
         ? formatIndiaFlight(r.indiaTravel.departure)
         : "",
       wantsBed(r, m) ? "Yes" : "No",
       m.needsAssistance ? (m.assistanceNote ?? "Yes") : "",
+      m.attendsYouthConvention == null
+        ? ""
+        : m.attendsYouthConvention
+          ? "Yes"
+          : "No",
       r.mobileVerification === "otp"
         ? "OTP"
         : r.mobileVerification === "in_person"
@@ -227,6 +247,15 @@ export function Registrations() {
             </Link>
           </>
         }
+      />
+
+      <ShareLink
+        title="Registration form link"
+        description="For devotees to register themselves or their family, in English or Gujarati. No sign-in needed."
+        path="/register"
+        // In both languages: the form offers both.
+        whatsappText={`${EVENT.name} — register yourself and your family here. The form can be filled in English or Gujarati.\n${EVENT.name} — તમારી અને તમારા પરિવારની નોંધણી અહીં કરો. ફોર્મ ગુજરાતીમાં પણ ભરી શકાય છે.`}
+        openLabel="Open the registration form"
       />
 
       <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">

@@ -4,6 +4,7 @@ import {
   MANDALS,
   NO_MANDAL,
   OVERSEAS_MANDALS,
+  YOUTH_MAX_AGE,
   isLocalMandal,
   STAY_DATES,
   TIME_SLOTS,
@@ -14,6 +15,7 @@ import {
   type TimeSlot,
 } from "@/config/event"
 
+import { translator, type Lang, type Translate } from "@/i18n/translate"
 import {
   DEFAULT_COUNTRY_CODE,
   fromE164,
@@ -56,7 +58,43 @@ const MEAL_ANSWERS = ["yes", "no"]
 /** The travel modes the form offers: all but "local", which is set, not picked. */
 export const TRAVEL_CHOICES = (
   Object.keys(TRAVEL_MODES) as TravelMode[]
-).filter((mode) => mode !== "local")
+).filter((mode): mode is Exclude<TravelMode, "local"> => mode !== "local")
+
+/** Whether someone of this age (as typed) is asked about the Youth Convention. */
+export const asksYouthConvention = (age: string) =>
+  /^\d{1,3}$/.test(age.trim()) && Number(age) <= YOUTH_MAX_AGE
+
+/** "yes" → true, "no" → false, anything else (unanswered) → undefined. */
+const yesNoAnswer = (answer: string | undefined) =>
+  answer === "yes" ? true : answer === "no" ? false : undefined
+
+/** A flight number in capitals ("6e 2131" → "6E 2131"); anything else as typed. */
+const asTyped = (mode: string, reference: string) =>
+  mode === "flight" ? reference.toUpperCase() : reference
+
+/**
+ * Whether the text has letters from a script other than English's: a name
+ * typed in Gujarati or Hindi. Names are kept in English letters only, so the
+ * team can search, sort and print them however the form was filled in.
+ * Mirrors hasNonLatinLetters on the server.
+ */
+export const hasNonLatinLetters = (text: string) =>
+  /(?!\p{Script=Latin})\p{L}/u.test(text)
+
+/** What a pickup or drop's train, bus or flight is missing, when it is. */
+const REFERENCE_REQUIRED: Record<DropMode, string> = {
+  train: "Enter the train number and name",
+  public_bus: "Enter the bus details",
+  flight: "Enter the flight number",
+}
+
+/** Whether a pickup and drop in Ahmedabad are offered for this way of travelling. */
+export const offersPickup = (mode: string): mode is DropMode =>
+  (DROP_MODES as readonly string[]).includes(mode)
+
+/** The ways of leaving a drop is offered for: to a station, bus stand or the airport. */
+export const DROP_MODES = ["train", "public_bus", "flight"] as const
+export type DropMode = (typeof DROP_MODES)[number]
 
 /** A meal answer as saved: only for a slot with a meal. */
 const mealTaken = (slot: string, answer: string) =>
@@ -67,381 +105,513 @@ const mealAnswer = (point: StayPoint) =>
 const STAY_DATE_VALUES: readonly string[] = STAY_DATES
 const SLOT_VALUES = Object.keys(TIME_SLOTS)
 
-const memberSchema = z.object({
-  // The person's id on a saved registration, sent back so the server keeps
-  // it (room allotments point at it). Not shown; missing for someone new.
-  key: z.string().optional(),
-  fullName: z.string().trim().min(2, "Enter the full name"),
-  gender: z.string().refine(isIn(Object.keys(GENDERS)), "Select a gender"),
-  age: z
+/** A name: at least two characters, in English letters (see hasNonLatinLetters). */
+const nameField = (t: Translate, tooShort: string) =>
+  z
     .string()
     .trim()
+    .min(2, tooShort)
     .refine(
-      (v) => /^\d{1,3}$/.test(v) && Number(v) >= 1 && Number(v) <= 100,
-      "Enter an age from 1 to 100"
-    ),
-  mobileCountry: z.string(),
-  // Digits only, without the country code. Checked in superRefine, because
-  // the valid length depends on the country picked beside it.
-  mobile: z.string().trim(),
-  relation: z.string(),
-  needsAssistance: z.boolean(),
-  assistanceNote: z.string(),
-  // Only used when the party does not travel together. Checked in superRefine.
-  arrivalDate: z.string(),
-  arrivalSlot: z.string(),
-  departureDate: z.string(),
-  departureSlot: z.string(),
-  arrivalMeal: z.string(),
-  departureMeal: z.string(),
-  // Asked per person only when the party does not all need a bed. Optional so
-  // a draft saved before it existed still loads.
-  needsAccommodation: z.boolean().optional(),
-})
+      (v) => !hasNonLatinLetters(v),
+      t("Write the name in English letters, e.g. Ramesh Patel")
+    )
 
-export const registrationFormSchema = z
-  .object({
-    type: z.enum(["individual", "family"]),
-    groupName: z.string().trim(),
-    mandal: z
+const makeMemberSchema = (t: Translate) =>
+  z.object({
+    // The person's id on a saved registration, sent back so the server keeps
+    // it (room allotments point at it). Not shown; missing for someone new.
+    key: z.string().optional(),
+    fullName: nameField(t, t("Enter the full name")),
+    gender: z.string().refine(isIn(Object.keys(GENDERS)), t("Select a gender")),
+    age: z
       .string()
-      .refine(isIn([...MANDALS, NO_MANDAL]), "Select your mandal"),
-    members: z.array(memberSchema),
-    sameSchedule: z.boolean(),
-    // The party's dates. Only asked for while everyone travels together —
-    // checked in superRefine, since with split dates they are not on screen.
+      .trim()
+      .refine(
+        (v) => /^\d{1,3}$/.test(v) && Number(v) >= 1 && Number(v) <= 100,
+        t("Enter an age from 1 to 100")
+      ),
+    mobileCountry: z.string(),
+    // Digits only, without the country code. Checked in superRefine, because
+    // the valid length depends on the country picked beside it.
+    mobile: z.string().trim(),
+    relation: z.string(),
+    // No longer asked. Kept so editing an older registration keeps its answer.
+    needsAssistance: z.boolean(),
+    assistanceNote: z.string(),
+    // Only used when the party does not travel together. Checked in superRefine.
     arrivalDate: z.string(),
     arrivalSlot: z.string(),
     departureDate: z.string(),
     departureSlot: z.string(),
-    // "yes" or "no" to the meal served in the arrival or departure slot
-    // (SLOT_MEALS). Only asked when that slot has one; checked in superRefine.
     arrivalMeal: z.string(),
     departureMeal: z.string(),
-    // Not asked of local mandals (isLocalMandal): checked in superRefine.
-    travelMode: z.string(),
-    vehicleCount: z.string().trim(),
-    // One per vehicle, all optional. Longer than the count when the count
-    // was lowered: kept so raising it again brings the numbers back, and
-    // trimmed to the count on submit.
-    vehicleNumbers: z.array(z.string().optional()),
-    travelReference: z.string().trim(),
-    needsPickup: z.boolean(),
-    needsDrop: z.boolean(),
-    accommodationRequired: z.boolean(),
-    notes: z.string().trim(),
-    consent: z
-      .boolean()
-      .refine((v) => v, "Please confirm the details to submit"),
-    // Set by MobileVerification once the primary contact's code is right: the
-    // number that was verified, and the server's proof of it. Not inputs.
-    verifiedMobile: z.string(),
-    mobileVerificationToken: z.string(),
-    // Ticked by a sanchalak or admin at the desk instead of sending a code.
-    verifiedInPerson: z.boolean(),
-    // When editing: the contact number already on the registration. Keeping
-    // it needs no new verification. Empty for a new registration.
-    keptMobile: z.string(),
-    // A number found to be another registration's contact already (one
-    // registration per number), and that registration's code. Set by
-    // MobileVerification; blocks Continue while the number is the same.
-    takenMobile: z.string(),
-    takenCode: z.string(),
-    // The other people of a family while "Individual" is picked, so switching
-    // back brings them back. Never submitted, never validated.
-    stashedMembers: z.array(z.custom<z.infer<typeof memberSchema>>(() => true)),
-    // From abroad (see `isOverseas`): a pickup from and a drop to Ahmedabad
-    // airport, both optional. Ticking one asks for its flight: the day
-    // (needed), the time and number (if known). A date is "YYYY-MM-DD" and a
-    // time "HH:MM". Kept but not sent while hidden or unticked.
-    indiaNeedsPickup: z.boolean(),
-    indiaArrivalDate: z.string(),
-    indiaArrivalTime: z.string(),
-    indiaArrivalFlight: z.string(),
-    indiaNeedsDrop: z.boolean(),
-    indiaDepartureDate: z.string(),
-    indiaDepartureTime: z.string(),
-    indiaDepartureFlight: z.string(),
+    // Asked per person only when the party does not all need a bed. Optional so
+    // a draft saved before it existed still loads.
+    needsAccommodation: z.boolean().optional(),
+    // Aged YOUTH_MAX_AGE or under: "yes", "no" or unanswered (optional).
+    // Optional so a draft saved before it existed still loads.
+    youthConvention: z.string().optional(),
   })
-  .superRefine((values, ctx) => {
-    const issue = (path: (string | number)[], message: string) =>
-      ctx.addIssue({ code: "custom", path, message })
-    // Arriving or leaving in a slot with a meal: "will you take it?" needs an answer.
-    const checkMeal = (
-      path: (string | number)[],
-      slot: string,
-      answer: string
-    ) => {
-      if (mealOf(slot) && !MEAL_ANSWERS.includes(answer))
-        issue(path, "Choose yes or no")
-    }
 
-    if (values.type === "family" && values.groupName.length < 2) {
-      issue(["groupName"], "Enter a family name, e.g. Patel family")
-    }
-
-    if (values.type === "individual" && values.members.length !== 1) {
-      issue(["members"], "An individual registration has exactly one person")
-    }
-    if (values.type === "family" && values.members.length < 2) {
-      issue(["members"], "Add at least two people to a family registration")
-    }
-
-    // The same person added twice. Compared ignoring case and extra spaces,
-    // so "Harit  Patel" and "harit patel" count as one name. Flagged on the
-    // later entry, which is the one to remove or correct.
-    const firstWithName = new Map<string, number>()
-    values.members.forEach((member, index) => {
-      const key = member.fullName.trim().replace(/\s+/g, " ").toLowerCase()
-      if (key.length < 2) return
-      const first = firstWithName.get(key)
-      if (first === undefined) {
-        firstWithName.set(key, index)
-        return
-      }
-      issue(
-        ["members", index, "fullName"],
-        first === 0
-          ? "Already added as the primary contact"
-          : `Already added as person ${first + 1}`
-      )
+/**
+ * The schema with its messages in `lang`. RegistrationForm makes one per
+ * language; the values and rules are the same in every one.
+ */
+export function makeRegistrationFormSchema(lang: Lang = "en") {
+  const t = translator(lang)
+  const memberSchema = makeMemberSchema(t)
+  return z
+    .object({
+      type: z.enum(["individual", "family"]),
+      groupName: z.string().trim(),
+      mandal: z
+        .string()
+        .refine(isIn([...MANDALS, NO_MANDAL]), t("Select your mandal")),
+      members: z.array(memberSchema),
+      sameSchedule: z.boolean(),
+      // The party's dates. Only asked for while everyone travels together —
+      // checked in superRefine, since with split dates they are not on screen.
+      arrivalDate: z.string(),
+      arrivalSlot: z.string(),
+      departureDate: z.string(),
+      departureSlot: z.string(),
+      // "yes" or "no" to the meal served in the arrival or departure slot
+      // (SLOT_MEALS). Only asked when that slot has one; checked in superRefine.
+      arrivalMeal: z.string(),
+      departureMeal: z.string(),
+      // Not asked of local mandals (isLocalMandal): checked in superRefine.
+      travelMode: z.string(),
+      vehicleCount: z.string().trim(),
+      // One per vehicle, all optional. Longer than the count when the count
+      // was lowered: kept so raising it again brings the numbers back, and
+      // trimmed to the count on submit.
+      vehicleNumbers: z.array(z.string().optional()),
+      travelReference: z.string().trim(),
+      // Train, bus or flight, with a pickup (and then required): when it reaches
+      // Ahmedabad ("HH:MM"); and, for a train, at which station.
+      travelTime: z.string(),
+      travelStation: z.string().trim(),
+      // Train, public bus or flight: "yes" or "no", required, unanswered until picked.
+      // The journey's details are asked, and sent, only after a "yes".
+      needsPickup: z.string(),
+      needsDrop: z.boolean(),
+      // Train, bus or flight, with a drop (and then required): the journey home, as for
+      // the one in.
+      // "train", "public_bus" or "flight": how they leave, which need not be how
+      // they came.
+      dropMode: z.string(),
+      dropReference: z.string().trim(),
+      dropStation: z.string().trim(),
+      dropTime: z.string(),
+      accommodationRequired: z.boolean(),
+      notes: z.string().trim(),
+      consent: z
+        .boolean()
+        .refine((v) => v, t("Please confirm the details to submit")),
+      // Set by MobileVerification once the primary contact's code is right: the
+      // number that was verified, and the server's proof of it. Not inputs.
+      verifiedMobile: z.string(),
+      mobileVerificationToken: z.string(),
+      // Ticked by a sanchalak or admin at the desk instead of sending a code.
+      verifiedInPerson: z.boolean(),
+      // When editing: the contact number already on the registration. Keeping
+      // it needs no new verification. Empty for a new registration.
+      keptMobile: z.string(),
+      // A number found to be another registration's contact already (one
+      // registration per number), and that registration's code. Set by
+      // MobileVerification; blocks Continue while the number is the same.
+      takenMobile: z.string(),
+      takenCode: z.string(),
+      // The other people of a family while "Individual" is picked, so switching
+      // back brings them back. Never submitted, never validated.
+      stashedMembers: z.array(
+        z.custom<z.infer<ReturnType<typeof makeMemberSchema>>>(() => true)
+      ),
+      // From abroad (see `isOverseas`): a pickup from Ahmedabad airport,
+      // optional, and the flight out, for the record only — no drop is
+      // arranged. A flight is its day, time and number; the day is needed once
+      // the pickup is ticked or anything about the flight out is given. A date
+      // is "YYYY-MM-DD" and a time "HH:MM". The landing flight is kept but not
+      // sent while hidden or unticked.
+      indiaNeedsPickup: z.boolean(),
+      indiaArrivalDate: z.string(),
+      indiaArrivalTime: z.string(),
+      indiaArrivalFlight: z.string(),
+      indiaDepartureDate: z.string(),
+      indiaDepartureTime: z.string(),
+      indiaDepartureFlight: z.string(),
     })
+    .superRefine((values, ctx) => {
+      const issue = (path: (string | number)[], message: string) =>
+        ctx.addIssue({ code: "custom", path, message })
+      // Arriving or leaving in a slot with a meal: "will you take it?" needs an answer.
+      const checkMeal = (
+        path: (string | number)[],
+        slot: string,
+        answer: string
+      ) => {
+        if (mealOf(slot) && !MEAL_ANSWERS.includes(answer))
+          issue(path, t("Choose yes or no"))
+      }
 
-    // A relation that implies a gender has to agree with the gender picked.
-    // On the relation field; changing either field re-checks it.
-    if (values.type === "family") {
-      values.members.forEach((member, index) => {
-        const expected =
-          RELATION_GENDER[member.relation as keyof typeof RELATION_GENDER]
-        if (
-          index === 0 ||
-          !expected ||
-          !member.gender ||
-          member.gender === expected
-        )
-          return
+      if (values.type === "family" && values.groupName.length < 2) {
+        issue(["groupName"], t("Enter a family name, e.g. Patel family"))
+      } else if (
+        values.type === "family" &&
+        hasNonLatinLetters(values.groupName)
+      ) {
         issue(
-          ["members", index, "relation"],
-          `${member.relation} has to be ${GENDERS[expected]} — check the gender or the relation`
+          ["groupName"],
+          t("Write the family name in English letters, e.g. Patel family")
+        )
+      }
+
+      if (values.type === "individual" && values.members.length !== 1) {
+        issue(
+          ["members"],
+          t("An individual registration has exactly one person")
+        )
+      }
+      if (values.type === "family" && values.members.length < 2) {
+        issue(
+          ["members"],
+          t("Add at least two people to a family registration")
+        )
+      }
+
+      // The same person added twice. Compared ignoring case and extra spaces,
+      // so "Harit  Patel" and "harit patel" count as one name. Flagged on the
+      // later entry, which is the one to remove or correct.
+      const firstWithName = new Map<string, number>()
+      values.members.forEach((member, index) => {
+        const key = member.fullName.trim().replace(/\s+/g, " ").toLowerCase()
+        if (key.length < 2) return
+        const first = firstWithName.get(key)
+        if (first === undefined) {
+          firstWithName.set(key, index)
+          return
+        }
+        issue(
+          ["members", index, "fullName"],
+          first === 0
+            ? t("Already added as the primary contact")
+            : t("Already added as person {n}", { n: first + 1 })
         )
       })
-    }
 
-    values.members.forEach((member, index) => {
-      if (member.mobile === "") {
-        if (index === 0) {
+      // A relation that implies a gender has to agree with the gender picked.
+      // On the relation field; changing either field re-checks it.
+      if (values.type === "family") {
+        values.members.forEach((member, index) => {
+          const expected =
+            RELATION_GENDER[member.relation as keyof typeof RELATION_GENDER]
+          if (
+            index === 0 ||
+            !expected ||
+            !member.gender ||
+            member.gender === expected
+          )
+            return
+          issue(
+            ["members", index, "relation"],
+            t(
+              "{relation} has to be {gender} — check the gender or the relation",
+              {
+                relation: t(member.relation),
+                gender: t(GENDERS[expected]),
+              }
+            )
+          )
+        })
+      }
+
+      values.members.forEach((member, index) => {
+        if (member.mobile === "") {
+          if (index === 0) {
+            issue(
+              ["members", 0, "mobile"],
+              t("The primary contact needs a mobile number")
+            )
+          }
+          return
+        }
+        const error = mobileError(member.mobile, member.mobileCountry, t)
+        if (error) {
+          issue(["members", index, "mobile"], error)
+          return
+        }
+        // The primary contact's number has to be verified: by OTP, by a
+        // sanchalak or admin in person, or already on the registration being
+        // edited. A number changed after verifying needs it again.
+        // One registration per contact number.
+        if (
+          index === 0 &&
+          values.takenMobile &&
+          contactMobile(values) === values.takenMobile
+        ) {
           issue(
             ["members", 0, "mobile"],
-            "The primary contact needs a mobile number"
+            t("Already registered as {code} — one registration per number", {
+              code: values.takenCode,
+            })
           )
+          return
         }
-        return
-      }
-      const error = mobileError(member.mobile, member.mobileCountry)
-      if (error) {
-        issue(["members", index, "mobile"], error)
-        return
-      }
-      // The primary contact's number has to be verified: by OTP, by a
-      // sanchalak or admin in person, or already on the registration being
-      // edited. A number changed after verifying needs it again.
-      // One registration per contact number.
-      if (
-        index === 0 &&
-        values.takenMobile &&
-        contactMobile(values) === values.takenMobile
-      ) {
-        issue(
-          ["members", 0, "mobile"],
-          `Already registered as ${values.takenCode} — one registration per number`
-        )
-        return
-      }
-      if (index === 0 && !isContactVerified(values)) {
-        issue(
-          ["members", 0, "mobile"],
-          "Verify this number with the code we send on WhatsApp"
-        )
-      }
-    })
-
-    // A family is looked after by an adult. Someone registering alone may be
-    // younger, so this is for families only.
-    const contactAge = Number(values.members[0]?.age)
-    if (
-      values.type === "family" &&
-      contactAge >= 1 &&
-      contactAge < MIN_FAMILY_CONTACT_AGE
-    ) {
-      issue(
-        ["members", 0, "age"],
-        `A family's primary contact has to be ${MIN_FAMILY_CONTACT_AGE} or older`
-      )
-    }
-
-    if (!hasSplitDates(values)) {
-      if (!isIn(STAY_DATE_VALUES)(values.arrivalDate))
-        issue(["arrivalDate"], "Select the arrival day")
-      if (!isIn(SLOT_VALUES)(values.arrivalSlot))
-        issue(["arrivalSlot"], "Select a time")
-      if (!isIn(STAY_DATE_VALUES)(values.departureDate))
-        issue(["departureDate"], "Select the departure day")
-      if (!isIn(SLOT_VALUES)(values.departureSlot))
-        issue(["departureSlot"], "Select a time")
-      checkMeal(["arrivalMeal"], values.arrivalSlot, values.arrivalMeal)
-      checkMeal(["departureMeal"], values.departureSlot, values.departureMeal)
-
-      const arrival = {
-        date: values.arrivalDate,
-        slot: values.arrivalSlot,
-      } as StayPoint
-      const departure = {
-        date: values.departureDate,
-        slot: values.departureSlot,
-      } as StayPoint
-      const datesPicked =
-        isIn(STAY_DATE_VALUES)(values.arrivalDate) &&
-        isIn(STAY_DATE_VALUES)(values.departureDate) &&
-        isIn(SLOT_VALUES)(values.arrivalSlot) &&
-        isIn(SLOT_VALUES)(values.departureSlot)
-      if (datesPicked && compareStay(departure, arrival) <= 0) {
-        issue(["departureDate"], "Departure has to be after arrival")
-      }
-    } else {
-      values.members.forEach((member, index) => {
-        const path = ["members", index]
-        checkMeal(
-          [...path, "arrivalMeal"],
-          member.arrivalSlot,
-          member.arrivalMeal
-        )
-        checkMeal(
-          [...path, "departureMeal"],
-          member.departureSlot,
-          member.departureMeal
-        )
-        // Both checked, not one then the other, so every gap shows at once.
-        const arrivalPicked =
-          isIn(STAY_DATE_VALUES)(member.arrivalDate) &&
-          isIn(SLOT_VALUES)(member.arrivalSlot)
-        const departurePicked =
-          isIn(STAY_DATE_VALUES)(member.departureDate) &&
-          isIn(SLOT_VALUES)(member.departureSlot)
-        if (!arrivalPicked) issue([...path, "arrivalDate"], "Select arrival")
-        if (!departurePicked)
-          issue([...path, "departureDate"], "Select departure")
-        if (!arrivalPicked || !departurePicked) return
-        const memberArrival = {
-          date: member.arrivalDate,
-          slot: member.arrivalSlot,
-        } as StayPoint
-        const memberDeparture = {
-          date: member.departureDate,
-          slot: member.departureSlot,
-        } as StayPoint
-        if (compareStay(memberDeparture, memberArrival) <= 0) {
-          issue([...path, "departureDate"], "Departure has to be after arrival")
+        if (index === 0 && !isContactVerified(values)) {
+          issue(
+            ["members", 0, "mobile"],
+            t("Verify this number with the code we send on WhatsApp")
+          )
         }
       })
-    }
 
-    // The airport pickup and drop are asked on step 1, before the event
-    // dates: there a flight only has to fall within reach of the event. Step 3
-    // then keeps the event dates between landing and flying out, on the date
-    // fields shown there.
-    if (isOverseas(values)) {
-      const landing = values.indiaNeedsPickup ? values.indiaArrivalDate : ""
-      const leaving = values.indiaNeedsDrop ? values.indiaDepartureDate : ""
-      const firstDay = EVENT.days[0]
-      const lastDay = EVENT.days[EVENT.days.length - 1]
-      if (values.indiaNeedsPickup && !landing) {
-        issue(["indiaArrivalDate"], "Pick the day you land")
-      }
-      if (values.indiaNeedsDrop && !leaving) {
-        issue(["indiaDepartureDate"], "Pick the day you fly out")
-      }
-      if (landing && landing > lastDay) {
-        issue(
-          ["indiaArrivalDate"],
-          `The event ends on ${formatDay(lastDay)} — land on or before then`
-        )
-      }
-      if (leaving && leaving < firstDay) {
-        issue(
-          ["indiaDepartureDate"],
-          `The event starts on ${formatDay(firstDay)} — fly out on or after then`
-        )
-      } else if (leaving && landing && leaving < landing) {
-        issue(["indiaDepartureDate"], "Has to be after you land")
-      }
-
-      const people = hasSplitDates(values)
-        ? values.members.map((m, i) => ({ ...m, path: ["members", i] }))
-        : [{ ...values, path: [] as (string | number)[] }]
-      for (const person of people) {
-        if (landing && person.arrivalDate && person.arrivalDate < landing) {
-          issue(
-            [...person.path, "arrivalDate"],
-            `You land in India on ${formatDay(landing)} — arrive on or after then`
-          )
-        }
-        if (leaving && person.departureDate && person.departureDate > leaving) {
-          issue(
-            [...person.path, "departureDate"],
-            `Your flight out of India is on ${formatDay(leaving)} — leave on or before then`
-          )
-        }
-      }
-    }
-
-    // Locals are not asked how they travel; everyone else picks one of the
-    // modes on offer ("local" is set for them, never picked).
-    if (
-      !isLocalMandal(values.mandal) &&
-      !isIn(TRAVEL_CHOICES)(values.travelMode)
-    ) {
-      issue(["travelMode"], "Select how you are travelling")
-    }
-
-    if (values.travelMode === "personal_vehicle") {
-      // An individual's count is not asked (it is always one), so only a
-      // family's is checked: one to four, and no more than there are people.
-      const max = maxVehicles(values)
-      const count = Number(values.vehicleCount)
+      // A family is looked after by an adult. Someone registering alone may be
+      // younger, so this is for families only.
+      const contactAge = Number(values.members[0]?.age)
       if (
         values.type === "family" &&
-        values.vehicleCount !== "" &&
-        !(Number.isInteger(count) && count >= 1 && count <= max)
+        contactAge >= 1 &&
+        contactAge < MIN_FAMILY_CONTACT_AGE
       ) {
         issue(
-          ["vehicleCount"],
-          max < MAX_VEHICLES.family
-            ? `Enter 1 to ${max} — no more vehicles than people`
-            : `Enter 1 to ${max}`
+          ["members", 0, "age"],
+          t("A family's primary contact has to be {age} or older", {
+            age: MIN_FAMILY_CONTACT_AGE,
+          })
         )
       }
-      // Optional, but a number that is there has to be a real plate, and each
-      // vehicle only once.
-      const firstWithPlate = new Map<string, number>()
-      values.vehicleNumbers
-        .slice(0, vehicleSlots(values))
-        .forEach((number, index) => {
-          const value = (number ?? "").trim()
-          if (value === "") return
-          if (!isVehiclePlate(value)) {
+
+      if (!hasSplitDates(values)) {
+        if (!isIn(STAY_DATE_VALUES)(values.arrivalDate))
+          issue(["arrivalDate"], t("Select the arrival day"))
+        if (!isIn(SLOT_VALUES)(values.arrivalSlot))
+          issue(["arrivalSlot"], t("Select a time"))
+        if (!isIn(STAY_DATE_VALUES)(values.departureDate))
+          issue(["departureDate"], t("Select the departure day"))
+        if (!isIn(SLOT_VALUES)(values.departureSlot))
+          issue(["departureSlot"], t("Select a time"))
+        checkMeal(["arrivalMeal"], values.arrivalSlot, values.arrivalMeal)
+        checkMeal(["departureMeal"], values.departureSlot, values.departureMeal)
+
+        const arrival = {
+          date: values.arrivalDate,
+          slot: values.arrivalSlot,
+        } as StayPoint
+        const departure = {
+          date: values.departureDate,
+          slot: values.departureSlot,
+        } as StayPoint
+        const datesPicked =
+          isIn(STAY_DATE_VALUES)(values.arrivalDate) &&
+          isIn(STAY_DATE_VALUES)(values.departureDate) &&
+          isIn(SLOT_VALUES)(values.arrivalSlot) &&
+          isIn(SLOT_VALUES)(values.departureSlot)
+        if (datesPicked && compareStay(departure, arrival) <= 0) {
+          issue(["departureDate"], t("Departure has to be after arrival"))
+        }
+      } else {
+        values.members.forEach((member, index) => {
+          const path = ["members", index]
+          checkMeal(
+            [...path, "arrivalMeal"],
+            member.arrivalSlot,
+            member.arrivalMeal
+          )
+          checkMeal(
+            [...path, "departureMeal"],
+            member.departureSlot,
+            member.departureMeal
+          )
+          // Both checked, not one then the other, so every gap shows at once.
+          const arrivalPicked =
+            isIn(STAY_DATE_VALUES)(member.arrivalDate) &&
+            isIn(SLOT_VALUES)(member.arrivalSlot)
+          const departurePicked =
+            isIn(STAY_DATE_VALUES)(member.departureDate) &&
+            isIn(SLOT_VALUES)(member.departureSlot)
+          if (!arrivalPicked)
+            issue([...path, "arrivalDate"], t("Select arrival"))
+          if (!departurePicked)
+            issue([...path, "departureDate"], t("Select departure"))
+          if (!arrivalPicked || !departurePicked) return
+          const memberArrival = {
+            date: member.arrivalDate,
+            slot: member.arrivalSlot,
+          } as StayPoint
+          const memberDeparture = {
+            date: member.departureDate,
+            slot: member.departureSlot,
+          } as StayPoint
+          if (compareStay(memberDeparture, memberArrival) <= 0) {
             issue(
-              ["vehicleNumbers", index],
-              "Enter a number like GJ-05-AB-1234"
+              [...path, "departureDate"],
+              t("Departure has to be after arrival")
             )
-            return
           }
-          const first = firstWithPlate.get(normalizePlate(value))
-          if (first !== undefined)
-            issue(["vehicleNumbers", index], `Same as vehicle ${first + 1}`)
-          else firstWithPlate.set(normalizePlate(value), index)
         })
-    }
-  })
+      }
+
+      // The airport pickup and drop are asked on step 1, before the event
+      // dates: there a flight only has to fall within reach of the event. Step 3
+      // then keeps the event dates between landing and flying out, on the date
+      // fields shown there.
+      if (isOverseas(values)) {
+        const landing = values.indiaNeedsPickup ? values.indiaArrivalDate : ""
+        const leaving = values.indiaDepartureDate
+        const firstDay = EVENT.days[0]
+        const lastDay = EVENT.days[EVENT.days.length - 1]
+        if (values.indiaNeedsPickup && !landing) {
+          issue(["indiaArrivalDate"], t("Pick the day you land"))
+        }
+        if (
+          !leaving &&
+          (values.indiaDepartureTime || values.indiaDepartureFlight.trim())
+        ) {
+          issue(["indiaDepartureDate"], t("Pick the day you fly out"))
+        }
+        if (landing && landing > lastDay) {
+          issue(
+            ["indiaArrivalDate"],
+            t("The event ends on {date} — land on or before then", {
+              date: formatDay(lastDay, lang),
+            })
+          )
+        }
+        if (leaving && leaving < firstDay) {
+          issue(
+            ["indiaDepartureDate"],
+            t("The event starts on {date} — fly out on or after then", {
+              date: formatDay(firstDay, lang),
+            })
+          )
+        } else if (leaving && landing && leaving < landing) {
+          issue(["indiaDepartureDate"], t("Has to be after you land"))
+        }
+
+        const people = hasSplitDates(values)
+          ? values.members.map((m, i) => ({ ...m, path: ["members", i] }))
+          : [{ ...values, path: [] as (string | number)[] }]
+        for (const person of people) {
+          if (landing && person.arrivalDate && person.arrivalDate < landing) {
+            issue(
+              [...person.path, "arrivalDate"],
+              t("You land in India on {date} — arrive on or after then", {
+                date: formatDay(landing, lang),
+              })
+            )
+          }
+          if (
+            leaving &&
+            person.departureDate &&
+            person.departureDate > leaving
+          ) {
+            issue(
+              [...person.path, "departureDate"],
+              t(
+                "Your flight out of India is on {date} — leave on or before then",
+                { date: formatDay(leaving, lang) }
+              )
+            )
+          }
+        }
+      }
+
+      // Locals are not asked how they travel; everyone else picks one of the
+      // modes on offer ("local" is set for them, never picked).
+      if (
+        !isLocalMandal(values.mandal) &&
+        !isIn(TRAVEL_CHOICES)(values.travelMode)
+      ) {
+        issue(["travelMode"], t("Select how you are travelling"))
+      }
+      if (
+        !isLocalMandal(values.mandal) &&
+        offersPickup(values.travelMode) &&
+        !isIn(MEAL_ANSWERS)(values.needsPickup)
+      ) {
+        issue(["needsPickup"], t("Select Yes or No"))
+      }
+      // A pickup or a drop needs its journey: the train's number, station and
+      // time; the bus's details and time; or the flight number and time.
+      if (!isLocalMandal(values.mandal) && offersPickup(values.travelMode)) {
+        // A drop is offered only with a pickup.
+        const drop = values.needsPickup === "yes" && values.needsDrop
+        if (drop && !offersPickup(values.dropMode)) {
+          issue(["dropMode"], t("Select how you are leaving"))
+        }
+        const legs = [
+          {
+            wanted: values.needsPickup === "yes",
+            mode: values.travelMode,
+            fields: ["travelReference", "travelStation", "travelTime"] as const,
+            timeMessage: t("Pick the arrival time"),
+          },
+          {
+            // Leaving may be by another way than arriving: its own mode.
+            wanted: drop && offersPickup(values.dropMode),
+            mode: values.dropMode,
+            fields: ["dropReference", "dropStation", "dropTime"] as const,
+            timeMessage: t("Pick the departure time"),
+          },
+        ]
+        for (const { wanted, mode, fields, timeMessage } of legs) {
+          if (!wanted) continue
+          const train = mode === "train"
+          const [reference, station, time] = fields
+          if (!values[reference].trim()) {
+            issue([reference], t(REFERENCE_REQUIRED[mode as DropMode]))
+          }
+          if (train && !values[station]) issue([station], t("Pick the station"))
+          if (!values[time]) issue([time], timeMessage)
+        }
+      }
+
+      if (values.travelMode === "personal_vehicle") {
+        // An individual's count is not asked (it is always one), so only a
+        // family's is checked: one to four, and no more than there are people.
+        const max = maxVehicles(values)
+        const count = Number(values.vehicleCount)
+        if (
+          values.type === "family" &&
+          values.vehicleCount !== "" &&
+          !(Number.isInteger(count) && count >= 1 && count <= max)
+        ) {
+          issue(
+            ["vehicleCount"],
+            max < MAX_VEHICLES.family
+              ? t("Enter 1 to {max} — no more vehicles than people", { max })
+              : t("Enter 1 to {max}", { max })
+          )
+        }
+        // Optional, but a number that is there has to be a real plate, and each
+        // vehicle only once.
+        const firstWithPlate = new Map<string, number>()
+        values.vehicleNumbers
+          .slice(0, vehicleSlots(values))
+          .forEach((number, index) => {
+            const value = (number ?? "").trim()
+            if (value === "") return
+            if (!isVehiclePlate(value)) {
+              issue(
+                ["vehicleNumbers", index],
+                t("Enter a number like GJ-05-AB-1234")
+              )
+              return
+            }
+            const first = firstWithPlate.get(normalizePlate(value))
+            if (first !== undefined)
+              issue(
+                ["vehicleNumbers", index],
+                t("Same as vehicle {n}", { n: first + 1 })
+              )
+            else firstWithPlate.set(normalizePlate(value), index)
+          })
+      }
+    })
+}
+
+/** The schema in English: its messages for the desk, its shape for the types. */
+export const registrationFormSchema = makeRegistrationFormSchema()
 
 export type RegistrationFormValues = z.infer<typeof registrationFormSchema>
 
@@ -539,17 +709,18 @@ const indiaFlight = (
 })
 
 /**
- * The airport pickup and drop as saved: only for someone from abroad who
- * ticked either, with the flight for each one ticked.
+ * The airport pickup and flight out as saved: only for someone from abroad
+ * who ticked the pickup or gave the day they fly out.
  */
 export function indiaTravelOf(
   values: RegistrationFormValues
 ): IndiaTravel | undefined {
-  const { indiaNeedsPickup: needsPickup, indiaNeedsDrop: needsDrop } = values
-  if (!isOverseas(values) || (!needsPickup && !needsDrop)) return undefined
+  const { indiaNeedsPickup: needsPickup, indiaDepartureDate: leaving } = values
+  if (!isOverseas(values) || (!needsPickup && !leaving)) return undefined
   return {
     needsPickup,
-    needsDrop,
+    // No drop is arranged any more; the flight out is for the record.
+    needsDrop: false,
     arrival: needsPickup
       ? indiaFlight(
           values.indiaArrivalDate,
@@ -557,7 +728,7 @@ export function indiaTravelOf(
           values.indiaArrivalFlight
         )
       : undefined,
-    departure: needsDrop
+    departure: leaving
       ? indiaFlight(
           values.indiaDepartureDate,
           values.indiaDepartureTime,
@@ -586,7 +757,8 @@ const RELATION_AGE_GAP: Partial<
  * By person index; only for people whose relation and both ages are filled.
  */
 export function relationAgeHints(
-  values: Pick<RegistrationFormValues, "type" | "members">
+  values: Pick<RegistrationFormValues, "type" | "members">,
+  t: Translate
 ) {
   const hints = new Map<number, string>()
   if (values.type !== "family") return hints
@@ -601,12 +773,25 @@ export function relationAgeHints(
       ? age >= contactAge + gap.years
       : age <= contactAge - gap.years
     if (fits) return
-    const who = contact.fullName.trim().split(/\s+/)[0] || "the primary contact"
+    const who =
+      contact.fullName.trim().split(/\s+/)[0] || t("the primary contact")
+    const vars = {
+      relation: t(member.relation).toLowerCase(),
+      years: gap.years,
+      who,
+      age: contactAge,
+    }
     hints.set(
       index,
       gap.older
-        ? `Check the age: a ${member.relation.toLowerCase()} is usually at least ${gap.years} years older than ${who} (${contactAge}).`
-        : `Check the age: a ${member.relation.toLowerCase()} is usually at least ${gap.years} years younger than ${who} (${contactAge}).`
+        ? t(
+            "Check the age: a {relation} is usually at least {years} years older than {who} ({age}).",
+            vars
+          )
+        : t(
+            "Check the age: a {relation} is usually at least {years} years younger than {who} ({age}).",
+            vars
+          )
     )
   })
   return hints
@@ -750,6 +935,15 @@ export const STEP_FIELDS = [
     "departureMeal",
     "members",
     "travelMode",
+    "needsPickup",
+    "travelReference",
+    "travelStation",
+    "travelTime",
+    "needsDrop",
+    "dropMode",
+    "dropReference",
+    "dropStation",
+    "dropTime",
     "vehicleCount",
     "vehicleNumbers",
   ],
@@ -766,6 +960,7 @@ export function emptyMember(): MemberFormValues {
     relation: "",
     needsAssistance: false,
     assistanceNote: "",
+    youthConvention: "",
     arrivalDate: "",
     arrivalSlot: "",
     departureDate: "",
@@ -792,8 +987,14 @@ export const DEFAULT_VALUES: RegistrationFormValues = {
   vehicleCount: "1",
   vehicleNumbers: [""],
   travelReference: "",
-  needsPickup: false,
+  travelTime: "",
+  travelStation: "",
+  needsPickup: "",
   needsDrop: false,
+  dropMode: "",
+  dropReference: "",
+  dropStation: "",
+  dropTime: "",
   accommodationRequired: false,
   notes: "",
   consent: false,
@@ -808,7 +1009,6 @@ export const DEFAULT_VALUES: RegistrationFormValues = {
   indiaArrivalDate: "",
   indiaArrivalTime: "",
   indiaArrivalFlight: "",
-  indiaNeedsDrop: false,
   indiaDepartureDate: "",
   indiaDepartureTime: "",
   indiaDepartureFlight: "",
@@ -836,6 +1036,9 @@ export function toNewRegistration(
     ? "local"
     : (values.travelMode as TravelMode)
   const split = hasSplitDates(values)
+  const pickup = offersPickup(mode) && values.needsPickup === "yes"
+  // A drop is offered only with a pickup.
+  const drop = pickup && values.needsDrop
   const type: RegistrationType = values.type
 
   const beds = bedsWanted(values)
@@ -856,6 +1059,9 @@ export function toNewRegistration(
     needsAssistance: member.needsAssistance,
     assistanceNote: member.needsAssistance
       ? orUndefined(member.assistanceNote.trim())
+      : undefined,
+    attendsYouthConvention: asksYouthConvention(member.age)
+      ? yesNoAnswer(member.youthConvention)
       : undefined,
     arrival: !split
       ? arrival
@@ -904,13 +1110,30 @@ export function toNewRegistration(
               .map((number) => (number ?? "").trim().toUpperCase())
               .filter(Boolean)
           : undefined,
+      // By train, bus or flight, the details are asked only with a pickup.
       reference:
-        mode === "personal_vehicle" || mode === "local"
+        mode === "personal_vehicle" ||
+        mode === "local" ||
+        (offersPickup(mode) && !pickup)
           ? undefined
-          : orUndefined(values.travelReference),
-      needsPickup:
-        (mode === "train" || mode === "flight") && values.needsPickup,
-      needsDrop: (mode === "train" || mode === "flight") && values.needsDrop,
+          : orUndefined(asTyped(mode, values.travelReference)),
+      arrivalTime: pickup ? orUndefined(values.travelTime) : undefined,
+      station:
+        mode === "train" && pickup
+          ? orUndefined(values.travelStation)
+          : undefined,
+      needsPickup: pickup,
+      needsDrop: drop,
+      departureMode:
+        drop && offersPickup(values.dropMode) ? values.dropMode : undefined,
+      departureReference: drop
+        ? orUndefined(asTyped(values.dropMode, values.dropReference))
+        : undefined,
+      departureStation:
+        drop && values.dropMode === "train"
+          ? orUndefined(values.dropStation)
+          : undefined,
+      departureTime: drop ? orUndefined(values.dropTime) : undefined,
     },
     accommodationRequired: beds.some(Boolean),
     indiaTravel: indiaTravelOf(values),
@@ -949,6 +1172,12 @@ export function fromRegistration(
       relation: member.relation ?? "",
       needsAssistance: member.needsAssistance,
       assistanceNote: member.assistanceNote ?? "",
+      youthConvention:
+        member.attendsYouthConvention == null
+          ? ""
+          : member.attendsYouthConvention
+            ? "yes"
+            : "no",
       arrivalDate: split ? member.arrival.date : "",
       arrivalSlot: split ? member.arrival.slot : "",
       departureDate: split ? member.departure.date : "",
@@ -986,8 +1215,23 @@ export function fromRegistration(
       ...Array<string>(Math.max(1, count) - numbers.length).fill(""),
     ].slice(0, Math.max(1, count, numbers.length)),
     travelReference: registration.travel.reference ?? "",
-    needsPickup: registration.travel.needsPickup,
+    travelTime: registration.travel.arrivalTime ?? "",
+    travelStation: registration.travel.station ?? "",
+    needsPickup: offersPickup(registration.travel.mode)
+      ? registration.travel.needsPickup
+        ? "yes"
+        : "no"
+      : "",
     needsDrop: registration.travel.needsDrop ?? false,
+    // Before it was asked, leaving was the way they came.
+    dropMode:
+      registration.travel.departureMode ??
+      (registration.travel.needsDrop && offersPickup(registration.travel.mode)
+        ? registration.travel.mode
+        : ""),
+    dropReference: registration.travel.departureReference ?? "",
+    dropStation: registration.travel.departureStation ?? "",
+    dropTime: registration.travel.departureTime ?? "",
     accommodationRequired: registration.accommodationRequired && everyone,
     ...fromIndiaTravel(registration.indiaTravel),
     notes: registration.notes ?? "",
@@ -995,14 +1239,13 @@ export function fromRegistration(
   }
 }
 
-/** A saved airport pickup and drop back as form values. */
+/** A saved airport pickup and flight out back as form values. */
 function fromIndiaTravel(india?: IndiaTravel) {
   return {
     indiaNeedsPickup: india?.needsPickup ?? false,
     indiaArrivalDate: india?.arrival?.date ?? "",
     indiaArrivalTime: india?.arrival?.time ?? "",
     indiaArrivalFlight: india?.arrival?.flight ?? "",
-    indiaNeedsDrop: india?.needsDrop ?? false,
     indiaDepartureDate: india?.departure?.date ?? "",
     indiaDepartureTime: india?.departure?.time ?? "",
     indiaDepartureFlight: india?.departure?.flight ?? "",

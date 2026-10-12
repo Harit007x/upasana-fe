@@ -11,7 +11,9 @@ import { Link } from "react-router"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/choice"
 import { Input } from "@/components/ui/input"
-import { formatMobile } from "@/lib/phone"
+import { useT } from "@/i18n/context"
+import { serverMessage } from "@/i18n/translate"
+import { asciiDigits, formatMobile } from "@/lib/phone"
 
 import { useRegistrationLookup, useSendOtp, useVerifyOtp } from "../api"
 import { DevCodeNote } from "../components"
@@ -41,6 +43,7 @@ export function MobileVerification() {
   const { watch, setValue, trigger, getValues } =
     useFormContext<RegistrationFormValues>()
   const { allowInPerson, atDesk, editingId } = useFormOptions()
+  const { t } = useT()
   const [members, keptMobile, verifiedInPerson, verifiedMobile, token] = watch([
     "members",
     "keptMobile",
@@ -165,7 +168,7 @@ export function MobileVerification() {
     return (
       <p className="-mt-1 flex items-center gap-1.5 text-2xs/relaxed text-muted-foreground">
         <RiCheckboxCircleFill className="size-4 shrink-0 text-primary" />
-        The contact number on this registration — no new code needed.
+        {t("The contact number on this registration — no new code needed.")}
       </p>
     )
   }
@@ -174,7 +177,7 @@ export function MobileVerification() {
     return (
       <p className="-mt-1 flex items-center gap-1.5 text-2xs/relaxed font-medium text-primary">
         <RiCheckboxCircleFill className="size-4 shrink-0" />
-        {formatMobile(e164)} verified
+        {t("{mobile} verified", { mobile: formatMobile(e164) })}
       </p>
     )
   }
@@ -203,8 +206,9 @@ export function MobileVerification() {
           {!awaitingCode ? (
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <p className="text-2xs/relaxed text-muted-foreground">
-                We send a 6-digit code on WhatsApp to confirm this number
-                belongs to the contact.
+                {t(
+                  "We send a 6-digit code on WhatsApp to confirm this number belongs to the contact."
+                )}
               </p>
               <Button
                 type="button"
@@ -218,32 +222,41 @@ export function MobileVerification() {
                 ) : (
                   <RiWhatsappLine />
                 )}
-                Send code
+                {t("Send code")}
               </Button>
             </div>
           ) : (
             <>
               <p className="text-2xs/relaxed text-muted-foreground">
-                Enter the code sent on WhatsApp to{" "}
-                <span className="font-medium text-foreground tabular-nums">
-                  {formatMobile(e164)}
-                </span>
-                .
+                {(() => {
+                  const [before, after] = t(
+                    "Enter the code sent on WhatsApp to {mobile}."
+                  ).split("{mobile}")
+                  return (
+                    <>
+                      {before}
+                      <span className="font-medium text-foreground tabular-nums">
+                        {formatMobile(e164)}
+                      </span>
+                      {after}
+                    </>
+                  )
+                })()}
               </p>
               <div className="flex items-stretch gap-2">
                 <Input
                   id="otp-code"
                   inputMode="numeric"
                   autoComplete="one-time-code"
-                  placeholder="6-digit code"
+                  placeholder={t("6-digit code")}
                   maxLength={6}
                   value={code}
-                  aria-label="Verification code"
+                  aria-label={t("Verification code")}
                   aria-invalid={!!verifyOtp.error}
                   className="max-w-40 tracking-[0.3em] tabular-nums placeholder:tracking-normal"
                   autoFocus
                   onChange={(event) => {
-                    const digits = event.target.value
+                    const digits = asciiDigits(event.target.value)
                       .replace(/\D/g, "")
                       .slice(0, 6)
                     setCode(digits)
@@ -268,12 +281,14 @@ export function MobileVerification() {
                   {verifyOtp.isPending && (
                     <RiLoader4Line className="animate-spin" />
                   )}
-                  Verify
+                  {t("Verify")}
                 </Button>
               </div>
               <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-2xs/relaxed text-muted-foreground">
                 {resendIn > 0 ? (
-                  <span className="tabular-nums">Resend in {resendIn}s</span>
+                  <span className="tabular-nums">
+                    {t("Resend in {n}s", { n: resendIn })}
+                  </span>
                 ) : (
                   <button
                     type="button"
@@ -281,7 +296,7 @@ export function MobileVerification() {
                     disabled={sendOtp.isPending}
                     className="text-primary hover:underline disabled:opacity-50"
                   >
-                    Resend code
+                    {t("Resend code")}
                   </button>
                 )}
                 {devCode && (
@@ -293,7 +308,9 @@ export function MobileVerification() {
           )}
 
           {error && (
-            <p className="text-2xs/relaxed text-destructive">{error.message}</p>
+            <p className="text-2xs/relaxed text-destructive">
+              {serverMessage(t, error.message)}
+            </p>
           )}
         </div>
       )}
@@ -317,23 +334,26 @@ function AlreadyRegistered({
   mobile: string
   token?: string
 }) {
+  const { t } = useT()
   return (
     <div className="flex flex-col gap-2 rounded-md border border-destructive/30 bg-destructive/5 p-3 text-2xs/relaxed">
       <p className="flex items-start gap-1.5 font-medium text-destructive">
         <RiErrorWarningLine className="mt-px size-3.5 shrink-0" />
-        {formatMobile(mobile)} is already registered
+        {t("{mobile} is already registered", { mobile: formatMobile(mobile) })}
       </p>
       <p className="text-foreground">
         <span className="font-mono font-medium">{r.code}</span> · {r.name} ·{" "}
-        {r.people} {r.people === 1 ? "person" : "people"} ·{" "}
-        {REGISTRATION_STATUSES[r.status]}
+        {r.people === 1 ? t("1 person") : t("{n} people", { n: r.people })} ·{" "}
+        {t(REGISTRATION_STATUSES[r.status])}
         {atDesk && ` · ${r.mandal}`}
       </p>
       <p className="text-muted-foreground">
-        Each contact number has one registration.{" "}
+        {t("Each contact number has one registration.")}{" "}
         {atDesk
           ? "Change that registration instead, or use another family member's number as the contact."
-          : "To add people or change dates, change that registration instead."}
+          : t(
+              "To add people or change dates, change that registration instead."
+            )}
       </p>
       {atDesk ? (
         r.id ? (
@@ -355,7 +375,7 @@ function AlreadyRegistered({
             state={{ mobile, token }}
             className="self-start font-medium text-primary hover:underline"
           >
-            Change my registration
+            {t("Change my registration")}
           </Link>
         )
       )}

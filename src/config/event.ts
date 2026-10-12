@@ -6,6 +6,8 @@
  * a date or adding a mandal is an edit to this file and nothing else.
  */
 
+import { localeOf, translator, type Lang } from "@/i18n/translate"
+
 export const EVENT = {
   name: "Youth Convention 2026",
   venue: "Mandir, Ahmedabad",
@@ -41,6 +43,10 @@ export const MANDALS = [
   "Delhi",
   "London (UK)",
   "New Jersey (USA)",
+  "Canada",
+  "New Zealand",
+  "Australia",
+  "Dubai (UAE)",
 ] as const
 
 /** For guests who come on their own, outside any mandal. */
@@ -61,6 +67,17 @@ const LOCAL_MANDALS: readonly string[] = [
 export const isLocalMandal = (mandal: string) =>
   mandal.startsWith("Ahmedabad") || LOCAL_MANDALS.includes(mandal)
 
+/** The oldest age asked whether they will attend the Youth Convention. Mirrors the server. */
+export const YOUTH_MAX_AGE = 40
+
+/** The Ahmedabad stations a train can arrive at. Mirrors TRAIN_STATIONS on the server. */
+export const TRAIN_STATIONS = [
+  "Kalupur (Ahmedabad Junction)",
+  "Sabarmati",
+  "Chandlodiya",
+  "Maninagar",
+] as const
+
 /**
  * Mandals outside India. Their devotees fly in, so the form offers —
  * optionally — a pickup from and a drop to Ahmedabad airport.
@@ -68,6 +85,10 @@ export const isLocalMandal = (mandal: string) =>
 export const OVERSEAS_MANDALS: readonly string[] = [
   "London (UK)",
   "New Jersey (USA)",
+  "Canada",
+  "New Zealand",
+  "Australia",
+  "Dubai (UAE)",
 ]
 
 /** Approximate time of day. Planning works in slots; nobody knows their exact train time a month out. */
@@ -93,11 +114,20 @@ export const SLOT_MEALS: Record<TimeSlot, string> = {
 export const mealOf = (slot: string): string | undefined =>
   SLOT_MEALS[slot as TimeSlot]
 
-const DATE_FORMAT = new Intl.DateTimeFormat("en-IN", {
-  day: "numeric",
-  month: "short",
-})
-const WEEKDAY_FORMAT = new Intl.DateTimeFormat("en-IN", { weekday: "short" })
+// One formatter per language, made on first use.
+const formatters = new Map<string, Intl.DateTimeFormat>()
+const formatterFor = (lang: Lang, kind: "day" | "weekday") => {
+  const key = `${lang}:${kind}`
+  let format = formatters.get(key)
+  if (!format) {
+    format = new Intl.DateTimeFormat(
+      localeOf(lang),
+      kind === "day" ? { day: "numeric", month: "short" } : { weekday: "short" }
+    )
+    formatters.set(key, format)
+  }
+  return format
+}
 
 /** Parses an ISO date as a local calendar day, so "2026-12-25" never renders as the 24th west of UTC. */
 export function toLocalDate(iso: string) {
@@ -105,30 +135,31 @@ export function toLocalDate(iso: string) {
   return new Date(y, m - 1, d)
 }
 
-/** "25 Dec" */
-export function formatDay(iso: string) {
-  return DATE_FORMAT.format(toLocalDate(iso))
+/** "25 Dec", or "25 ડિસે" in Gujarati */
+export function formatDay(iso: string, lang: Lang = "en") {
+  return formatterFor(lang, "day").format(toLocalDate(iso))
 }
 
 /** "Fri 25 Dec · Day 1", or "Thu 24 Dec · Day before" for the dates either side. */
-export function formatStayDate(iso: string) {
+export function formatStayDate(iso: string, lang: Lang = "en") {
+  const t = translator(lang)
   const dayIndex = (EVENT.days as readonly string[]).indexOf(iso)
   const suffix =
     dayIndex >= 0
-      ? `Day ${dayIndex + 1}`
+      ? t("Day {n}", { n: dayIndex + 1 })
       : iso < EVENT.days[0]
-        ? "Day before"
-        : "Day after"
-  return `${WEEKDAY_FORMAT.format(toLocalDate(iso))} ${formatDay(iso)} · ${suffix}`
+        ? t("Day before")
+        : t("Day after")
+  return `${formatterFor(lang, "weekday").format(toLocalDate(iso))} ${formatDay(iso, lang)} · ${suffix}`
 }
 
 /** "30 Jan – 1 Feb 2027", or "25 – 29 Dec 2026" within one month. */
-export function formatEventRange() {
+export function formatEventRange(lang: Lang = "en") {
   const first = EVENT.days[0]
   const last = EVENT.days[EVENT.days.length - 1]
   const start =
     first.slice(0, 7) === last.slice(0, 7)
-      ? formatDay(first).split(" ")[0]
-      : formatDay(first)
-  return `${start} – ${formatDay(last)} ${last.slice(0, 4)}`
+      ? formatDay(first, lang).split(" ")[0]
+      : formatDay(first, lang)
+  return `${start} – ${formatDay(last, lang)} ${last.slice(0, 4)}`
 }

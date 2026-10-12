@@ -8,6 +8,7 @@ import {
   type Member,
 } from "@/features/registrations/types"
 import { formatMobile } from "@/lib/phone"
+import { formatTime } from "@/lib/time"
 
 import type { RegistrationDetails } from "./api"
 
@@ -30,14 +31,23 @@ const orDash = (value: string | undefined | null) => value || "—"
 
 /** "Yes · Sun 24 Jan, 6:30 am · AI 144", or "No". */
 const airport = (needed: boolean | undefined, flight?: IndiaFlight) =>
-  needed ? ["Yes", flight && formatIndiaFlight(flight)].filter(Boolean).join(" · ") : "No"
+  needed
+    ? ["Yes", flight && formatIndiaFlight(flight)].filter(Boolean).join(" · ")
+    : "No"
 
 /** "Male, 34 yrs, Son" — how someone added or removed is described. */
 const describe = (m: Member) =>
   [GENDERS[m.gender], `${m.age} yrs`, m.relation].filter(Boolean).join(", ")
 
+const youthConvention = (answer: boolean | undefined | null) =>
+  answer == null ? "—" : answer ? "Yes" : "No"
+
 const assistance = (m: Member) =>
-  m.needsAssistance ? (m.assistanceNote ? `Yes · ${m.assistanceNote}` : "Yes") : "No"
+  m.needsAssistance
+    ? m.assistanceNote
+      ? `Yes · ${m.assistanceNote}`
+      : "Yes"
+    : "No"
 
 /** Every detail of one person that changed. */
 function memberLines(
@@ -56,6 +66,11 @@ function memberLines(
     ],
     ["Relation", orDash(before.relation), orDash(after.relation)],
     ["Needs assistance", assistance(before), assistance(after)],
+    [
+      "Youth Convention",
+      youthConvention(before.attendsYouthConvention),
+      youthConvention(after.attendsYouthConvention),
+    ],
     ["Arrival", formatStay(before.arrival), formatStay(after.arrival)],
     ["Departure", formatStay(before.departure), formatStay(after.departure)],
     [
@@ -102,7 +117,29 @@ export function describeChange(
     orDash(t1.vehicleNumbers?.join(", "))
   )
   add("Travel details", orDash(t0.reference), orDash(t1.reference))
-  add("Pickup from station or airport", yesNo(t0.needsPickup), yesNo(t1.needsPickup))
+  add("Station", orDash(t0.station), orDash(t1.station))
+  add(
+    "Pickup arrival time",
+    orDash(t0.arrivalTime && formatTime(t0.arrivalTime)),
+    orDash(t1.arrivalTime && formatTime(t1.arrivalTime))
+  )
+  add("Pickup in Ahmedabad", yesNo(t0.needsPickup), yesNo(t1.needsPickup))
+  add(
+    "Leaving by",
+    orDash(t0.departureMode && TRAVEL_MODES[t0.departureMode]),
+    orDash(t1.departureMode && TRAVEL_MODES[t1.departureMode])
+  )
+  add(
+    "Journey home",
+    orDash(t0.departureReference),
+    orDash(t1.departureReference)
+  )
+  add("Leaving from", orDash(t0.departureStation), orDash(t1.departureStation))
+  add(
+    "Journey home time",
+    orDash(t0.departureTime && formatTime(t0.departureTime)),
+    orDash(t1.departureTime && formatTime(t1.departureTime))
+  )
   add("Drop to station or airport", yesNo(t0.needsDrop), yesNo(t1.needsDrop))
 
   const i0 = before.indiaTravel
@@ -113,9 +150,9 @@ export function describeChange(
     airport(i1?.needsPickup, i1?.arrival)
   )
   add(
-    "Ahmedabad airport drop",
-    airport(i0?.needsDrop, i0?.departure),
-    airport(i1?.needsDrop, i1?.departure)
+    "Flight out of Ahmedabad",
+    orDash(i0?.departure && formatIndiaFlight(i0.departure)),
+    orDash(i1?.departure && formatIndiaFlight(i1.departure))
   )
 
   // People, matched on their id, which edits keep.

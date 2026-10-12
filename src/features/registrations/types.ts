@@ -106,6 +106,8 @@ export type Member = {
    * its members. Read it through `wantsBed` (stay.ts).
    */
   needsAccommodation?: boolean
+  /** Aged 40 or under: whether they will attend the Youth Convention. Absent when not answered. */
+  attendsYouthConvention?: boolean
 }
 
 export type Travel = {
@@ -115,10 +117,20 @@ export type Travel = {
   vehicleNumbers?: string[]
   /** Train or flight number, or the bus operator. */
   reference?: string
-  /** Pickup from Ahmedabad station or airport. */
+  /** Train, bus or flight, with a pickup: when it reaches Ahmedabad, "HH:MM". */
+  arrivalTime?: string
+  /** Train only: the Ahmedabad station it arrives at. */
+  station?: string
+  /** Train, public bus or flight: a pickup in Ahmedabad. */
   needsPickup: boolean
-  /** Train or flight: a drop to the station or airport when leaving. */
+  /** Train, bus or flight: a drop to the station, bus stand or airport when leaving. */
   needsDrop?: boolean
+  /** With a drop: how they leave, which need not be how they came. */
+  departureMode?: "train" | "public_bus" | "flight"
+  /** With a drop: the train, bus or flight home, its station (train only), and when it leaves ("HH:MM"). */
+  departureReference?: string
+  departureStation?: string
+  departureTime?: string
 }
 
 /** A flight into or out of Ahmedabad airport. */
@@ -131,16 +143,17 @@ export type IndiaFlight = {
 }
 
 /**
- * For devotees from abroad: a pickup from and a drop to Ahmedabad airport,
- * the only one the transport team covers. Asked on the first step when the
+ * For devotees from abroad: a pickup from Ahmedabad airport, the only one the
+ * transport team covers, and the flight out. Asked on the first step when the
  * mandal is overseas; both optional.
  */
 export type IndiaTravel = {
   needsPickup: boolean
   /** The flight they land on; with `needsPickup`. */
   arrival?: IndiaFlight
+  /** No longer offered: always false on new registrations. */
   needsDrop: boolean
-  /** The flight they leave on; with `needsDrop`. */
+  /** The flight they leave on, for the record; given or not. */
   departure?: IndiaFlight
 }
 

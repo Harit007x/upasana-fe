@@ -1,4 +1,8 @@
-import { DEFAULT_VALUES, emptyMember, type RegistrationFormValues } from "./schema"
+import {
+  DEFAULT_VALUES,
+  emptyMember,
+  type RegistrationFormValues,
+} from "./schema"
 
 /**
  * A half-filled registration, kept in this browser so a refresh, a closed tab
@@ -48,7 +52,11 @@ export function loadDraft(key: string): Draft | undefined {
       return undefined
     }
     const step = clampStep(stored.step)
-    return { values: withDefaults(stored.values), step, reached: Math.max(step, clampStep(stored.reached)) }
+    return {
+      values: withDefaults(stored.values),
+      step,
+      reached: Math.max(step, clampStep(stored.reached)),
+    }
   } catch {
     // Unreadable or blocked storage, or JSON that is not ours: start fresh.
     return undefined
@@ -77,7 +85,10 @@ export function clearDraft(key: string) {
  * not worth a draft or a "Clear form" button. `baseline` is the empty form for
  * a new registration, and the saved registration when editing one.
  */
-export function hasContent(values: RegistrationFormValues, baseline: RegistrationFormValues = DEFAULT_VALUES) {
+export function hasContent(
+  values: RegistrationFormValues,
+  baseline: RegistrationFormValues = DEFAULT_VALUES
+) {
   return JSON.stringify(values) !== JSON.stringify(baseline)
 }
 
@@ -85,12 +96,23 @@ export function hasContent(values: RegistrationFormValues, baseline: Registratio
  * Fills in anything the stored values lack — a field added to the form since
  * the draft was saved — so every input still has a value to show.
  */
-function withDefaults(values: Partial<RegistrationFormValues>): RegistrationFormValues {
+function withDefaults(
+  values: Partial<RegistrationFormValues>
+): RegistrationFormValues {
   const members =
     Array.isArray(values.members) && values.members.length > 0
       ? values.members.map((member) => ({ ...emptyMember(), ...member }))
       : DEFAULT_VALUES.members
-  return { ...DEFAULT_VALUES, ...values, members }
+  // The pickup was a tick box (true/false) before it became Yes or No.
+  const pickup: unknown = values.needsPickup
+  const needsPickup =
+    typeof pickup === "boolean" ? (pickup ? "yes" : "no") : values.needsPickup
+  return {
+    ...DEFAULT_VALUES,
+    ...values,
+    members,
+    needsPickup: needsPickup ?? DEFAULT_VALUES.needsPickup,
+  }
 }
 
 function clampStep(step: unknown) {

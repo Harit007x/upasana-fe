@@ -19,7 +19,8 @@ export function matchGenderToRelation(
   relation: string
 ): Gender | undefined {
   const expected = RELATION_GENDER[relation as keyof typeof RELATION_GENDER]
-  if (!expected || form.getValues(`members.${index}.gender`) === expected) return undefined
+  if (!expected || form.getValues(`members.${index}.gender`) === expected)
+    return undefined
   // Not validated here: errors only appear after Continue, and a "Select a
   // gender" already showing clears through keepErrorsFresh.
   form.setValue(`members.${index}.gender`, expected, { shouldDirty: true })

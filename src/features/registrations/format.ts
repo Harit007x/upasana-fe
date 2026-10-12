@@ -1,31 +1,38 @@
 import { TIME_SLOTS, formatStayDate, mealOf, toLocalDate } from "@/config/event"
+import { localeOf, translator, type Lang } from "@/i18n/translate"
 import { formatTime } from "@/lib/time"
 
 import type { IndiaFlight, Registration, StayPoint } from "./types"
 
 /** "Thu 24 Dec · Day before, evening · with dinner" */
-export function formatStay(point: StayPoint) {
-  const meal = formatMeal(point)
-  return `${formatStayDate(point.date)}, ${TIME_SLOTS[point.slot].split(" (")[0].toLowerCase()}${meal ? ` · ${meal}` : ""}`
+export function formatStay(point: StayPoint, lang: Lang = "en") {
+  const meal = formatMeal(point, lang)
+  const slot = translator(lang)(TIME_SLOTS[point.slot]).split(" (")[0]
+  return `${formatStayDate(point.date, lang)}, ${slot.toLowerCase()}${meal ? ` · ${meal}` : ""}`
 }
 
 /** "with breakfast" or "no breakfast"; empty on registrations from before it was asked. */
-export function formatMeal(point: Pick<StayPoint, "slot" | "meal">) {
+export function formatMeal(
+  point: Pick<StayPoint, "slot" | "meal">,
+  lang: Lang = "en"
+) {
+  const t = translator(lang)
   const meal = mealOf(point.slot)
   if (!meal || point.meal === undefined) return ""
-  return point.meal ? `with ${meal}` : `no ${meal}`
+  return point.meal
+    ? t("with {meal}", { meal: t(meal) })
+    : t("no {meal}", { meal: t(meal) })
 }
 
-const FLIGHT_DATE = new Intl.DateTimeFormat("en-IN", {
-  weekday: "short",
-  day: "numeric",
-  month: "short",
-})
-
 /** "Sun 24 Jan, 6:30 am · AI 144" — the time and number when given. */
-export function formatIndiaFlight(flight: IndiaFlight) {
+export function formatIndiaFlight(flight: IndiaFlight, lang: Lang = "en") {
+  const flightDate = new Intl.DateTimeFormat(localeOf(lang), {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+  })
   const when = [
-    FLIGHT_DATE.format(toLocalDate(flight.date)).replace(",", ""),
+    flightDate.format(toLocalDate(flight.date)).replace(",", ""),
     flight.time && formatTime(flight.time),
   ]
     .filter(Boolean)

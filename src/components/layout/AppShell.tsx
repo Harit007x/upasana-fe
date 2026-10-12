@@ -8,7 +8,9 @@ import {
   RiHotelBedLine,
   RiLogoutBoxRLine,
   RiMenuLine,
+  RiPieChart2Line,
   RiShieldUserLine,
+  RiSparkling2Line,
 } from "@remixicon/react"
 import { useQueryClient } from "@tanstack/react-query"
 import { cn } from "cn"
@@ -64,6 +66,18 @@ const EXTRA_NAV: NavItem[] = [
 ]
 
 const ADMIN_NAV: NavItem[] = [
+  {
+    to: "/admin/assistant",
+    label: "Assistant",
+    short: "Assistant",
+    icon: RiSparkling2Line,
+  },
+  {
+    to: "/admin/reports",
+    label: "Reports",
+    short: "Reports",
+    icon: RiPieChart2Line,
+  },
   {
     to: "/admin/schedule",
     label: "Schedule",

@@ -4,7 +4,10 @@ import { Checkbox } from "@/components/ui/choice"
 import { Badge } from "@/components/ui/primitives"
 import { Field, RequiredMark, Textarea } from "@/components/ui/input"
 import { isLocalMandal, type StayDate, type TimeSlot } from "@/config/event"
+import { useT } from "@/i18n/context"
+import type { Lang } from "@/i18n/translate"
 import { formatMobile, toE164 } from "@/lib/phone"
+import { formatTime } from "@/lib/time"
 
 import {
   GENDERS,
@@ -19,6 +22,8 @@ import {
   indiaTravelOf,
   bedsWanted,
   needsAccommodation,
+  offersPickup,
+  asksYouthConvention,
   vehicleSlots,
   type RegistrationFormValues,
 } from "./schema"
@@ -38,13 +43,16 @@ function Row({
   )
 }
 
-const stayText = (date: string, slot: string, meal: string) =>
+const stayText = (date: string, slot: string, meal: string, lang: Lang) =>
   date && slot
-    ? formatStay({
-        date: date as StayDate,
-        slot: slot as TimeSlot,
-        meal: meal === "" ? undefined : meal === "yes",
-      })
+    ? formatStay(
+        {
+          date: date as StayDate,
+          slot: slot as TimeSlot,
+          meal: meal === "" ? undefined : meal === "yes",
+        },
+        lang
+      )
     : "—"
 
 /** Step 4: everything on one screen before it is sent. */
@@ -58,10 +66,27 @@ export function ReviewStep({
     getValues,
     formState: { errors },
   } = useFormContext<RegistrationFormValues>()
+  const { t, lang } = useT()
   const values = getValues()
   const beds = bedsWanted(values)
   const mode = values.travelMode as TravelMode
   const india = indiaTravelOf(values)
+  const pickup = offersPickup(mode) && values.needsPickup === "yes"
+  const drop = pickup && values.needsDrop
+  // "Train · 12010 Shatabdi Exp · Sabarmati · leaves 6:45 pm": how they leave,
+  // which need not be how they came, and its details.
+  const journeyHome =
+    drop && offersPickup(values.dropMode)
+      ? [
+          t(TRAVEL_MODES[values.dropMode]),
+          values.dropReference,
+          values.dropMode === "train" && t(values.dropStation),
+          values.dropTime &&
+            t("leaves {time}", { time: formatTime(values.dropTime) }),
+        ]
+          .filter(Boolean)
+          .join(" · ")
+      : ""
 
   const editButton = (step: number) => (
     <button
@@ -69,7 +94,7 @@ export function ReviewStep({
       onClick={() => onEditStep(step)}
       className="-mr-2 rounded-md px-2 py-1.5 text-2xs text-primary hover:underline"
     >
-      Edit
+      {t("Edit")}
     </button>
   )
 
@@ -77,20 +102,26 @@ export function ReviewStep({
     <div className="flex flex-col gap-5">
       <section className="flex flex-col">
         <div className="flex items-center justify-between">
-          <h3 className="font-heading text-sm font-medium">Registration</h3>
+          <h3 className="font-heading text-sm font-medium">
+            {t("Registration")}
+          </h3>
           {editButton(0)}
         </div>
         <dl className="divide-y divide-border">
-          <Row label="Type">{REGISTRATION_TYPES[values.type]}</Row>
+          <Row label={t("Type")}>{t(REGISTRATION_TYPES[values.type])}</Row>
           {values.type !== "individual" && (
-            <Row label="Name">{values.groupName}</Row>
+            <Row label={t("Name")}>{values.groupName}</Row>
           )}
-          <Row label="Mandal / Travelling from">{values.mandal}</Row>
+          <Row label={t("Mandal / Travelling from")}>{t(values.mandal)}</Row>
           {india?.arrival && (
-            <Row label="Airport pickup">{formatIndiaFlight(india.arrival)}</Row>
+            <Row label={t("Airport pickup")}>
+              {formatIndiaFlight(india.arrival, lang)}
+            </Row>
           )}
           {india?.departure && (
-            <Row label="Airport drop">{formatIndiaFlight(india.departure)}</Row>
+            <Row label={t("Flight out")}>
+              {formatIndiaFlight(india.departure, lang)}
+            </Row>
           )}
         </dl>
       </section>
@@ -98,7 +129,7 @@ export function ReviewStep({
       <section className="flex flex-col gap-2">
         <div className="flex items-center justify-between">
           <h3 className="font-heading text-sm font-medium">
-            People ({values.members.length})
+            {t("People ({n})", { n: values.members.length })}
           </h3>
           {editButton(1)}
         </div>
@@ -113,24 +144,31 @@ export function ReviewStep({
                 {index === 0 && (
                   <span className="font-normal text-muted-foreground">
                     {" "}
-                    · contact
+                    · {t("contact")}
                   </span>
                 )}
                 {member.relation && index > 0 && values.type === "family" && (
                   <span className="font-normal text-muted-foreground">
                     {" "}
-                    · {member.relation}
+                    · {t(member.relation)}
                   </span>
                 )}
               </span>
               <span className="text-2xs/relaxed text-muted-foreground tabular-nums">
-                {GENDERS[member.gender as Gender]} · {member.age} yrs
+                {t(GENDERS[member.gender as Gender])} ·{" "}
+                {t("{age} yrs", { age: member.age })}
                 {member.mobile &&
                   ` · ${formatMobile(toE164(member.mobileCountry, member.mobile))}`}
-                {member.needsAssistance && " · needs assistance"}
+                {member.needsAssistance && ` · ${t("needs assistance")}`}
+                {asksYouthConvention(member.age) &&
+                  member.youthConvention &&
+                  ` · ${t("Youth Convention: {answer}", {
+                    answer:
+                      member.youthConvention === "yes" ? t("Yes") : t("No"),
+                  })}`}
                 {index === 0 &&
                   values.verifiedInPerson &&
-                  " · verified in person"}
+                  ` · ${t("verified in person")}`}
               </span>
             </li>
           ))}
@@ -140,25 +178,29 @@ export function ReviewStep({
       <section className="flex flex-col">
         <div className="flex items-center justify-between">
           <h3 className="font-heading text-sm font-medium">
-            {isLocalMandal(values.mandal) ? "Dates" : "Stay and travel"}
+            {isLocalMandal(values.mandal)
+              ? t("Dates")
+              : t("Mahotsav - Stay & Travel")}
           </h3>
           {editButton(2)}
         </div>
         <dl className="divide-y divide-border">
           {!hasSplitDates(values) ? (
             <>
-              <Row label="Arriving">
+              <Row label={t("Arriving")}>
                 {stayText(
                   values.arrivalDate,
                   values.arrivalSlot,
-                  values.arrivalMeal
+                  values.arrivalMeal,
+                  lang
                 )}
               </Row>
-              <Row label="Leaving">
+              <Row label={t("Leaving")}>
                 {stayText(
                   values.departureDate,
                   values.departureSlot,
-                  values.departureMeal
+                  values.departureMeal,
+                  lang
                 )}
               </Row>
             </>
@@ -168,23 +210,25 @@ export function ReviewStep({
                 {stayText(
                   member.arrivalDate,
                   member.arrivalSlot,
-                  member.arrivalMeal
+                  member.arrivalMeal,
+                  lang
                 )}{" "}
                 →{" "}
                 {stayText(
                   member.departureDate,
                   member.departureSlot,
-                  member.departureMeal
+                  member.departureMeal,
+                  lang
                 )}
               </Row>
             ))
           )}
           {isLocalMandal(values.mandal) ? (
-            <Row label="Travel and stay">Local — not needed</Row>
+            <Row label={t("Travel and stay")}>{t("Local — not needed")}</Row>
           ) : (
             <>
-              <Row label="Travel">
-                {TRAVEL_MODES[mode]}
+              <Row label={t("Travel")}>
+                {t(TRAVEL_MODES[mode])}
                 {mode === "personal_vehicle" &&
                   (() => {
                     const count = vehicleSlots(values)
@@ -192,45 +236,58 @@ export function ReviewStep({
                       .slice(0, count)
                       .map((number) => (number ?? "").trim().toUpperCase())
                       .filter(Boolean)
-                    return ` · ${count} ${count === 1 ? "vehicle" : "vehicles"}${numbers.length ? ` · ${numbers.join(", ")}` : ""}`
+                    return ` · ${count === 1 ? t("1 vehicle") : t("{n} vehicles", { n: count })}${numbers.length ? ` · ${numbers.join(", ")}` : ""}`
                   })()}
+                {/* By train or bus, the details come only with a pickup. */}
                 {mode !== "personal_vehicle" &&
+                  (!offersPickup(mode) || pickup) &&
                   values.travelReference &&
                   ` · ${values.travelReference}`}
-                {(mode === "train" || mode === "flight") &&
-                  values.needsPickup && (
-                    <Badge variant="info" className="ml-2 align-middle">
-                      Pickup needed
-                    </Badge>
-                  )}
-                {(mode === "train" || mode === "flight") &&
-                  values.needsDrop && (
-                    <Badge variant="info" className="ml-2 align-middle">
-                      Drop needed
-                    </Badge>
-                  )}
+                {mode === "train" &&
+                  pickup &&
+                  values.travelStation &&
+                  ` · ${t(values.travelStation)}`}
+                {pickup &&
+                  values.travelTime &&
+                  ` · ${t("arrives {time}", { time: formatTime(values.travelTime) })}`}
+                {pickup && (
+                  <Badge variant="info" className="ml-2 align-middle">
+                    {t("Pickup needed")}
+                  </Badge>
+                )}
+                {drop && (
+                  <Badge variant="info" className="ml-2 align-middle">
+                    {t("Drop needed")}
+                  </Badge>
+                )}
               </Row>
-              <Row label="Accommodation">
+              {journeyHome && (
+                <Row label={t("Journey home")}>{journeyHome}</Row>
+              )}
+              <Row label={t("Accommodation")}>
                 {needsAccommodation(values) ? (
                   <>
                     <Badge variant="info" className="align-middle">
-                      Needed
+                      {t("Needed")}
                     </Badge>
                     {/* Only some of the party: say who. */}
                     {beds.includes(false) && (
                       <span className="ml-2">
-                        for{" "}
-                        {values.members
-                          .map((m, i) =>
-                            beds[i] ? m.fullName || `Person ${i + 1}` : ""
-                          )
-                          .filter(Boolean)
-                          .join(", ")}
+                        {t("for {names}", {
+                          names: values.members
+                            .map((m, i) =>
+                              beds[i]
+                                ? m.fullName || t("Person {n}", { n: i + 1 })
+                                : ""
+                            )
+                            .filter(Boolean)
+                            .join(", "),
+                        })}
                       </span>
                     )}
                   </>
                 ) : (
-                  "Not needed"
+                  t("Not needed")
                 )}
               </Row>
             </>
@@ -238,10 +295,12 @@ export function ReviewStep({
         </dl>
       </section>
 
-      <Field label="Anything else we should know? (optional)">
+      <Field label={t("Anything else we should know? (optional)")}>
         <Textarea
           id="notes"
-          placeholder="Food preferences, seva you would like to offer, people you are travelling with…"
+          placeholder={t(
+            "Food preferences, seva you would like to offer, people you are travelling with…"
+          )}
           {...register("notes")}
         />
       </Field>
@@ -251,11 +310,13 @@ export function ReviewStep({
           id="consent"
           label={
             <>
-              These details are correct
+              {t("These details are correct")}
               <RequiredMark />
             </>
           }
-          description="I agree to follow the Mandir's guidelines during the event."
+          description={t(
+            "I agree to follow the Mandir's guidelines during the event."
+          )}
           {...register("consent")}
         />
         {errors.consent && (

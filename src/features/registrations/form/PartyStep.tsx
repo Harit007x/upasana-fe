@@ -5,6 +5,7 @@ import { ChoiceGroup } from "@/components/ui/choice"
 import { Field, Input } from "@/components/ui/input"
 import { NativeSelect } from "@/components/ui/select"
 import { MANDALS, NO_MANDAL } from "@/config/event"
+import { useT } from "@/i18n/context"
 
 import type { RegistrationType } from "../types"
 import { useFormOptions } from "./form-options"
@@ -44,6 +45,7 @@ export function PartyStep() {
   const { replace, append } = useFieldArray({ control, name: "members" })
   const [type, stashed, mandal] = watch(["type", "stashedMembers", "mandal"])
   const { lockedMandal } = useFormOptions()
+  const { t } = useT()
 
   /**
    * Keeps the member list in step with the type. An individual has exactly one
@@ -73,7 +75,7 @@ export function PartyStep() {
 
   return (
     <div className="flex flex-col gap-5">
-      <Field label="Registering as" required>
+      <Field label={t("Registering as")} required>
         <Controller
           control={control}
           name="type"
@@ -82,7 +84,11 @@ export function PartyStep() {
               name={field.name}
               value={field.value}
               onChange={onTypeChange}
-              options={TYPE_OPTIONS}
+              options={TYPE_OPTIONS.map((option) => ({
+                ...option,
+                label: t(option.label),
+                description: t(option.description),
+              }))}
               className="sm:grid-cols-2"
             />
           )}
@@ -90,10 +96,14 @@ export function PartyStep() {
       </Field>
 
       {type !== "individual" && (
-        <Field label="Family name" required error={errors.groupName?.message}>
+        <Field
+          label={t("Family name")}
+          required
+          error={errors.groupName?.message}
+        >
           <Input
             id="groupName"
-            placeholder="Patel family"
+            placeholder={t("Patel family")}
             aria-invalid={!!errors.groupName}
             {...register("groupName")}
           />
@@ -103,9 +113,13 @@ export function PartyStep() {
       {type === "individual" && stashed.length > 0 && (
         <p className="-mt-2 rounded-md bg-muted px-3 py-2 text-2xs/relaxed text-muted-foreground">
           {stashed.length === 1
-            ? "1 other person is"
-            : `${stashed.length} other people are`}{" "}
-          kept aside, not deleted. Switch back to Family to bring them back.
+            ? t(
+                "1 other person is kept aside, not deleted. Switch back to Family to bring them back."
+              )
+            : t(
+                "{n} other people are kept aside, not deleted. Switch back to Family to bring them back.",
+                { n: stashed.length }
+              )}
         </p>
       )}
 
@@ -113,13 +127,13 @@ export function PartyStep() {
         {lockedMandal ? (
           // A sanchalak registers people from their own mandal only.
           <Field
-            label="Mandal / Travelling from"
+            label={t("Mandal / Travelling from")}
             required
-            hint="You register people from your own mandal."
+            hint={t("You register people from your own mandal.")}
           >
             <Input
               id="mandal"
-              value={lockedMandal}
+              value={t(lockedMandal)}
               readOnly
               aria-readonly
               className="bg-muted/50"
@@ -127,9 +141,11 @@ export function PartyStep() {
           </Field>
         ) : (
           <Field
-            label="Mandal / Travelling from"
+            label={t("Mandal / Travelling from")}
             required
-            hint="Your satsang mandal, or the place you are travelling from."
+            hint={t(
+              "Your satsang mandal, or the place you are travelling from."
+            )}
             error={errors.mandal?.message}
           >
             <NativeSelect
@@ -138,14 +154,15 @@ export function PartyStep() {
               {...register("mandal")}
             >
               <option value="" disabled>
-                Select mandal
+                {t("Select mandal")}
               </option>
+              {/* Shown in the chosen language; saved in English. */}
               {MANDALS.map((mandal) => (
                 <option key={mandal} value={mandal}>
-                  {mandal}
+                  {t(mandal)}
                 </option>
               ))}
-              <option value={NO_MANDAL}>{NO_MANDAL}</option>
+              <option value={NO_MANDAL}>{t(NO_MANDAL)}</option>
             </NativeSelect>
           </Field>
         )}
@@ -153,9 +170,7 @@ export function PartyStep() {
 
       {/* From abroad: when they land in and leave India, asked right away. */}
       {isOverseas({ mandal }) && (
-        <IndiaTravelSection
-          weNeed={type === "individual" ? "I need" : "We need"}
-        />
+        <IndiaTravelSection alone={type === "individual"} />
       )}
     </div>
   )

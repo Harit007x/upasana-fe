@@ -8,6 +8,7 @@ import {
 import { cn } from "cn"
 import * as React from "react"
 
+import { useT } from "@/i18n/context"
 import { formatTime } from "@/lib/time"
 
 /**
@@ -55,35 +56,52 @@ const addMonths = (iso: string, months: number) => {
 const clampIso = (iso: string, min?: string, max?: string) =>
   min && iso < min ? min : max && iso > max ? max : iso
 
-const LONG_DATE = new Intl.DateTimeFormat("en-IN", {
-  weekday: "long",
-  day: "numeric",
-  month: "long",
-  year: "numeric",
-})
-const SHORT_DATE = new Intl.DateTimeFormat("en-IN", {
-  weekday: "short",
-  day: "numeric",
-  month: "short",
-  year: "numeric",
-})
-const MONTH = new Intl.DateTimeFormat("en-IN", {
-  month: "long",
-  year: "numeric",
-})
+/** The calendar's date formats and weekday names in one locale, made once each. */
+const calendars = new Map<
+  string,
+  {
+    long: Intl.DateTimeFormat
+    short: Intl.DateTimeFormat
+    month: Intl.DateTimeFormat
+    weekdays: [string, string][]
+  }
+>()
+function calendarFor(locale: string) {
+  let calendar = calendars.get(locale)
+  if (!calendar) {
+    const narrow = new Intl.DateTimeFormat(locale, { weekday: "narrow" })
+    const long = new Intl.DateTimeFormat(locale, { weekday: "long" })
+    calendar = {
+      long: new Intl.DateTimeFormat(locale, {
+        weekday: "long",
+        day: "numeric",
+        month: "long",
+        year: "numeric",
+      }),
+      short: new Intl.DateTimeFormat(locale, {
+        weekday: "short",
+        day: "numeric",
+        month: "short",
+        year: "numeric",
+      }),
+      month: new Intl.DateTimeFormat(locale, {
+        month: "long",
+        year: "numeric",
+      }),
+      // Sunday first: 1 Jan 2023 was a Sunday.
+      weekdays: Array.from({ length: 7 }, (_, i) => {
+        const day = new Date(2023, 0, 1 + i)
+        return [narrow.format(day), long.format(day)]
+      }),
+    }
+    calendars.set(locale, calendar)
+  }
+  return calendar
+}
 const asDate = (iso: string) => {
   const { y, m, d } = partsOf(iso)
   return new Date(y, m, d)
 }
-const WEEKDAYS = [
-  ["S", "Sunday"],
-  ["M", "Monday"],
-  ["T", "Tuesday"],
-  ["W", "Wednesday"],
-  ["T", "Thursday"],
-  ["F", "Friday"],
-  ["S", "Saturday"],
-] as const
 
 /**
  * A date field that opens a month calendar. Arrow keys move a day or a week,
@@ -99,7 +117,7 @@ export function DatePicker({
   defaultMonth,
   highlight = [],
   highlightLabel,
-  placeholder = "Pick a date",
+  placeholder,
   invalid,
   "aria-label": ariaLabel,
 }: {
@@ -117,6 +135,8 @@ export function DatePicker({
   invalid?: boolean
   "aria-label"?: string
 }) {
+  const { t, locale } = useT()
+  const calendar = calendarFor(locale)
   const [open, setOpen] = React.useState(false)
   // The day with keyboard focus; the month shown is the one it is in.
   const [active, setActive] = React.useState(() =>
@@ -181,13 +201,15 @@ export function DatePicker({
         id={id}
         aria-label={
           ariaLabel &&
-          `${ariaLabel}: ${value ? LONG_DATE.format(asDate(value)) : "not picked"}`
+          `${ariaLabel}: ${value ? calendar.long.format(asDate(value)) : t("not picked")}`
         }
         aria-invalid={invalid || undefined}
         className={triggerClass}
       >
         <span className={cn("truncate", !value && "text-muted-foreground")}>
-          {value ? SHORT_DATE.format(asDate(value)) : placeholder}
+          {value
+            ? calendar.short.format(asDate(value))
+            : (placeholder ?? t("Pick a date"))}
         </span>
         <RiCalendarLine
           aria-hidden
@@ -205,7 +227,7 @@ export function DatePicker({
             <div className="mb-2 flex items-center justify-between gap-2">
               <button
                 type="button"
-                aria-label="Previous month"
+                aria-label={t("Previous month")}
                 disabled={!canPrev}
                 onClick={() =>
                   setActive(clampIso(addMonths(active, -1), min, max))
@@ -218,11 +240,11 @@ export function DatePicker({
                 aria-live="polite"
                 className="font-heading text-sm font-medium"
               >
-                {MONTH.format(asDate(active))}
+                {calendar.month.format(asDate(active))}
               </Popover.Title>
               <button
                 type="button"
-                aria-label="Next month"
+                aria-label={t("Next month")}
                 disabled={!canNext}
                 onClick={() =>
                   setActive(clampIso(addMonths(active, 1), min, max))
@@ -234,7 +256,7 @@ export function DatePicker({
             </div>
 
             <div className="grid grid-cols-7 text-center text-2xs text-muted-foreground">
-              {WEEKDAYS.map(([short, long]) => (
+              {calendar.weekdays.map(([short, long]) => (
                 <abbr key={long} title={long} className="py-1 no-underline">
                   {short}
                 </abbr>
@@ -243,7 +265,7 @@ export function DatePicker({
             <div
               ref={grid}
               role="group"
-              aria-label={MONTH.format(asDate(active))}
+              aria-label={calendar.month.format(asDate(active))}
               onKeyDown={onKeyDown}
               className="grid grid-cols-7 gap-0.5"
             >
@@ -257,7 +279,7 @@ export function DatePicker({
                     data-iso={iso}
                     tabIndex={iso === active ? 0 : -1}
                     disabled={(!!min && iso < min) || (!!max && iso > max)}
-                    aria-label={LONG_DATE.format(asDate(iso))}
+                    aria-label={calendar.long.format(asDate(iso))}
                     aria-pressed={iso === value}
                     aria-current={iso === today ? "date" : undefined}
                     onClick={() => pick(iso)}
@@ -296,7 +318,7 @@ export function DatePicker({
                   onClick={() => pick("")}
                   className="rounded-sm px-1 text-primary outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring/50"
                 >
-                  Clear
+                  {t("Clear")}
                 </button>
               )}
             </div>
@@ -465,7 +487,7 @@ export function TimePicker({
   id,
   value,
   onChange,
-  placeholder = "Pick a time",
+  placeholder,
   invalid,
   "aria-label": ariaLabel,
 }: {
@@ -476,6 +498,7 @@ export function TimePicker({
   invalid?: boolean
   "aria-label"?: string
 }) {
+  const { t } = useT()
   const [open, setOpen] = React.useState(false)
   // Morning flights are the common case, so an empty field opens on 9:00 am.
   const [wheels, setWheels] = React.useState<Wheels>(
@@ -498,13 +521,13 @@ export function TimePicker({
         id={id}
         aria-label={
           ariaLabel &&
-          `${ariaLabel}: ${value ? formatTime(value) : "not picked"}`
+          `${ariaLabel}: ${value ? formatTime(value) : t("not picked")}`
         }
         aria-invalid={invalid || undefined}
         className={triggerClass}
       >
         <span className={cn("truncate", !value && "text-muted-foreground")}>
-          {value ? formatTime(value) : placeholder}
+          {value ? formatTime(value) : (placeholder ?? t("Pick a time"))}
         </span>
         <RiTimeLine
           aria-hidden
@@ -515,15 +538,15 @@ export function TimePicker({
         <Popover.Positioner sideOffset={6} align="start" className="z-50">
           <Popover.Popup className={cn(popupClass, "w-64")}>
             <Popover.Title className="sr-only">
-              {ariaLabel ?? "Pick a time"}
+              {ariaLabel ?? t("Pick a time")}
             </Popover.Title>
             {/* Column names, above the wheels they belong to. */}
             <div
               aria-hidden
               className="mb-1 flex gap-1 text-center text-2xs font-medium tracking-wide text-muted-foreground uppercase select-none"
             >
-              <span className="flex-1">Hr</span>
-              <span className="flex-1">Min</span>
+              <span className="flex-1">{t("Hr")}</span>
+              <span className="flex-1">{t("Min")}</span>
               <span className="flex-1" />
             </div>
             <div className="relative flex gap-1 select-none">
@@ -538,20 +561,20 @@ export function TimePicker({
                 index={wheels.hour}
                 onChange={turn("hour")}
                 loop
-                label="Hour"
+                label={t("Hour")}
               />
               <Wheel
                 items={MINUTES}
                 index={wheels.minute}
                 onChange={turn("minute")}
                 loop
-                label="Minutes"
+                label={t("Minutes")}
               />
               <Wheel
                 items={PERIODS}
                 index={wheels.period}
                 onChange={turn("period")}
-                label="Morning or afternoon"
+                label={t("Morning or afternoon")}
               />
             </div>
             <div className="mt-2 flex items-center justify-between gap-2 border-t border-border pt-2 text-xs">
@@ -564,7 +587,7 @@ export function TimePicker({
                   }}
                   className="rounded-sm px-1 text-primary outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring/50"
                 >
-                  Clear
+                  {t("Clear")}
                 </button>
               ) : (
                 <span />
@@ -573,7 +596,7 @@ export function TimePicker({
                 onClick={() => onChange(timeOf(wheels))}
                 className="rounded-md bg-primary px-3 py-1 font-medium text-primary-foreground outline-none hover:bg-primary/90 focus-visible:ring-2 focus-visible:ring-ring/50"
               >
-                Done
+                {t("Done")}
               </Popover.Close>
             </div>
           </Popover.Popup>

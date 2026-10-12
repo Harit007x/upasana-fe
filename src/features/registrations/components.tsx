@@ -14,6 +14,7 @@ import * as React from "react"
 
 import { Badge } from "@/components/ui/primitives"
 import { EVENT } from "@/config/event"
+import { useT } from "@/i18n/context"
 import { formatMobile } from "@/lib/phone"
 
 import { formatStay } from "./format"
@@ -57,9 +58,10 @@ export function TravelModeIcon({
 }
 
 export function StatusBadge({ status }: { status: RegistrationStatus }) {
+  const { t } = useT()
   return (
     <Badge variant={STATUS_VARIANT[status]}>
-      {REGISTRATION_STATUSES[status]}
+      {t(REGISTRATION_STATUSES[status])}
     </Badge>
   )
 }
@@ -80,48 +82,65 @@ export function RegistrationConfirmation({
   updated?: boolean
 }) {
   const primary = registration.members[0]
+  const { t, lang } = useT()
+  const name = primary?.fullName.split(" ")[0]
   return (
     <div className="flex flex-col items-center gap-5 rounded-lg border border-border bg-card px-6 py-10 text-center">
       <RiCheckboxCircleLine className="size-10 text-primary" />
       <div className="flex flex-col gap-1">
         <h2 className="font-heading text-base font-medium">
-          {updated ? "Changes saved" : "Registration received"}
+          {updated ? t("Changes saved") : t("Registration received")}
         </h2>
         <p className="max-w-sm text-xs/relaxed text-muted-foreground">
           {updated
-            ? `Thank you, ${primary?.fullName.split(" ")[0]}. Your registration is updated; the code stays the same.`
-            : `Thank you, ${primary?.fullName.split(" ")[0]}. Keep this code and show it at the registration desk when you arrive.`}
+            ? t(
+                "Thank you, {name}. Your registration is updated; the code stays the same.",
+                { name }
+              )
+            : t(
+                "Thank you, {name}. Keep this code and show it at the registration desk when you arrive.",
+                { name }
+              )}
         </p>
       </div>
       <div className="flex flex-col gap-1">
         <span className="text-3xs tracking-wider text-muted-foreground uppercase">
-          Registration code
+          {t("Registration code")}
         </span>
         <span className="font-mono text-3xl font-semibold tracking-wider tabular-nums">
           {registration.code}
         </span>
       </div>
       <dl className="grid w-full max-w-sm grid-cols-2 gap-x-4 gap-y-2 text-left text-xs/relaxed">
-        <dt className="text-muted-foreground">People</dt>
+        <dt className="text-muted-foreground">{t("People")}</dt>
         <dd className="tabular-nums">{registration.members.length}</dd>
-        <dt className="text-muted-foreground">Arriving</dt>
-        <dd>{formatStay(registration.arrival)}</dd>
-        <dt className="text-muted-foreground">Leaving</dt>
-        <dd>{formatStay(registration.departure)}</dd>
-        <dt className="text-muted-foreground">Event days</dt>
+        <dt className="text-muted-foreground">{t("Arriving")}</dt>
+        <dd>{formatStay(registration.arrival, lang)}</dd>
+        <dt className="text-muted-foreground">{t("Leaving")}</dt>
+        <dd>{formatStay(registration.departure, lang)}</dd>
+        <dt className="text-muted-foreground">{t("Event days")}</dt>
         <dd className="tabular-nums">
-          {eventDaysCovered(registration)} of {EVENT.days.length}
+          {t("{n} of {total}", {
+            n: eventDaysCovered(registration),
+            total: EVENT.days.length,
+          })}
         </dd>
-        <dt className="text-muted-foreground">Status</dt>
+        <dt className="text-muted-foreground">{t("Status")}</dt>
         <dd>
           <StatusBadge status={registration.status} />
         </dd>
       </dl>
       <p className="max-w-sm text-2xs/relaxed text-muted-foreground">
-        The seva team reviews every registration and confirms it on{" "}
-        {primary?.mobile ? formatMobile(primary.mobile) : "your mobile number"}.
+        {t(
+          "The seva team reviews every registration and confirms it on {mobile}.",
+          {
+            mobile: primary?.mobile
+              ? formatMobile(primary.mobile)
+              : t("your mobile number"),
+          }
+        )}
         {registration.accommodationRequired &&
-          " Room details follow once accommodation is allotted."}
+          ` ${t("Room details follow once accommodation is allotted.")}`}
       </p>
       <div className="flex flex-wrap justify-center gap-2">{actions}</div>
     </div>

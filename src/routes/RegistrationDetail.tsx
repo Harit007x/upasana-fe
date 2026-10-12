@@ -5,14 +5,7 @@ import { Link, useParams } from "react-router"
 import { PageHeader } from "@/components/layout/AppShell"
 import { BackLink } from "@/components/layout/BackLink"
 import { LoadError } from "@/components/LoadError"
-import { Button, buttonVariants } from "@/components/ui/button"
-import {
-  Dialog,
-  DialogBody,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-} from "@/components/ui/dialog"
+import { buttonVariants } from "@/components/ui/button"
 import {
   Badge,
   Card,
@@ -27,10 +20,8 @@ import type { AccommodationData } from "@/features/accommodation/types"
 // PAUSED 2026-10-11 — per-person room allotment (rooms now go to mandals).
 // import { RegistrationStay } from "@/features/accommodation/paused/RegistrationStay"
 // import { indexAccommodation } from "@/features/accommodation/paused/rules"
-import {
-  useRegistration,
-  useSetRegistrationStatus,
-} from "@/features/registrations/api"
+import { useRegistration } from "@/features/registrations/api"
+import { StatusActions } from "@/features/registrations/StatusActions"
 import {
   StatusBadge,
   TravelModeIcon,
@@ -52,11 +43,11 @@ import {
 } from "@/features/registrations/stay"
 import { canReview, isAdmin, useSession } from "@/lib/auth-client"
 import { formatMobile } from "@/lib/phone"
+import { formatTime } from "@/lib/time"
 import {
   GENDERS,
   TRAVEL_MODES,
   type Registration,
-  type RegistrationStatus,
 } from "@/features/registrations/types"
 
 function Detail({
@@ -131,90 +122,6 @@ function MandalRooms({
         )
       })}
     </ul>
-  )
-}
-
-/** The next steps staff can take from each status. */
-const ACTIONS: Record<
-  RegistrationStatus,
-  {
-    to: RegistrationStatus
-    label: string
-    variant?: "outline" | "destructive"
-  }[]
-> = {
-  pending: [
-    { to: "confirmed", label: "Confirm" },
-    { to: "cancelled", label: "Cancel", variant: "destructive" },
-  ],
-  confirmed: [
-    { to: "checked_in", label: "Mark checked in" },
-    { to: "pending", label: "Move back to pending", variant: "outline" },
-    { to: "cancelled", label: "Cancel", variant: "destructive" },
-  ],
-  checked_in: [{ to: "confirmed", label: "Undo check-in", variant: "outline" }],
-  cancelled: [{ to: "pending", label: "Restore", variant: "outline" }],
-}
-
-function StatusActions({ registration }: { registration: Registration }) {
-  const setStatus = useSetRegistrationStatus()
-  const [confirmCancel, setConfirmCancel] = React.useState(false)
-
-  const apply = (to: RegistrationStatus) =>
-    setStatus.mutate({ id: registration.id, status: to })
-
-  return (
-    <>
-      {ACTIONS[registration.status].map((action) => (
-        <Button
-          key={action.to}
-          size="lg"
-          variant={action.variant ?? "default"}
-          disabled={setStatus.isPending}
-          onClick={() =>
-            action.to === "cancelled"
-              ? setConfirmCancel(true)
-              : apply(action.to)
-          }
-        >
-          {action.label}
-        </Button>
-      ))}
-      {setStatus.isError && (
-        <p className="w-full text-2xs/relaxed text-destructive">
-          Could not update the status: {setStatus.error.message}
-        </p>
-      )}
-
-      <Dialog open={confirmCancel} onOpenChange={setConfirmCancel}>
-        <DialogContent>
-          <DialogHeader
-            title={`Cancel ${registration.code}?`}
-            description={`${displayName(registration)}, ${registration.members.length} ${registration.members.length === 1 ? "person" : "people"}.`}
-          />
-          <DialogBody>
-            <p className="text-xs/relaxed text-muted-foreground">
-              They drop out of the headcounts and the accommodation list. The
-              registration is kept and can be restored later.
-            </p>
-          </DialogBody>
-          <DialogFooter>
-            <Button variant="ghost" onClick={() => setConfirmCancel(false)}>
-              Keep it
-            </Button>
-            <Button
-              variant="destructive"
-              onClick={() => {
-                apply("cancelled")
-                setConfirmCancel(false)
-              }}
-            >
-              Cancel registration
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </>
   )
 }
 
@@ -392,6 +299,15 @@ export function RegistrationDetail() {
                       {m.assistanceNote ?? "Needs assistance"}
                     </div>
                   )}
+                  {m.attendsYouthConvention !== undefined &&
+                    m.attendsYouthConvention !== null && (
+                      <div className="text-2xs/relaxed text-muted-foreground">
+                        Youth Convention:{" "}
+                        {m.attendsYouthConvention
+                          ? "Attending"
+                          : "Not attending"}
+                      </div>
+                    )}
                   {split && ownDates && (
                     <div className="text-2xs/relaxed text-muted-foreground">
                       Own dates: {formatStay(m.arrival)} →{" "}
@@ -457,10 +373,7 @@ export function RegistrationDetail() {
                 <Detail label="Accommodation">
                   {accommodationText(r)}
                   {r.accommodationRequired && accommodation.data && (
-                    <MandalRooms
-                      mandal={r.mandal}
-                      data={accommodation.data}
-                    />
+                    <MandalRooms mandal={r.mandal} data={accommodation.data} />
                   )}
                 </Detail>
               </div>
@@ -497,7 +410,37 @@ export function RegistrationDetail() {
               {r.travel.reference && (
                 <Detail label="Details">{r.travel.reference}</Detail>
               )}
-              {(r.travel.mode === "train" || r.travel.mode === "flight") && (
+              {r.travel.station && (
+                <Detail label="Arriving at">{r.travel.station}</Detail>
+              )}
+              {r.travel.arrivalTime && (
+                <Detail label="Arrival time">
+                  {formatTime(r.travel.arrivalTime)}
+                </Detail>
+              )}
+              {r.travel.departureMode && (
+                <Detail label="Leaving by">
+                  {TRAVEL_MODES[r.travel.departureMode]}
+                </Detail>
+              )}
+              {r.travel.departureReference && (
+                <Detail label="Journey home">
+                  {r.travel.departureReference}
+                </Detail>
+              )}
+              {r.travel.departureStation && (
+                <Detail label="Leaving from">
+                  {r.travel.departureStation}
+                </Detail>
+              )}
+              {r.travel.departureTime && (
+                <Detail label="Departure time">
+                  {formatTime(r.travel.departureTime)}
+                </Detail>
+              )}
+              {(r.travel.mode === "train" ||
+                r.travel.mode === "public_bus" ||
+                r.travel.mode === "flight") && (
                 <div className="col-span-2">
                   <Detail label="Transport">
                     {r.travel.needsPickup || r.travel.needsDrop ? (
@@ -530,10 +473,10 @@ export function RegistrationDetail() {
                   </Detail>
                 </div>
                 <div className="col-span-2">
-                  <Detail label="Drop for the flight out">
+                  <Detail label="Flight out">
                     {r.indiaTravel.departure
                       ? formatIndiaFlight(r.indiaTravel.departure)
-                      : "Not needed"}
+                      : "Not given"}
                   </Detail>
                 </div>
               </dl>

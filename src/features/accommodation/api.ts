@@ -24,11 +24,16 @@ import type {
 
 const key = ["accommodation"] as const
 
+/** Places and mandals' rooms. Also loaded outside a hook (the Assistant). */
+export const accommodationQuery = {
+  queryKey: key,
+  queryFn: () => api.get<AccommodationData>("/accommodation"),
+}
+
 /** Polled, so occupancy a coordinator just reported shows up on the admin's screen. */
 export function useAccommodation() {
   return useQuery({
-    queryKey: key,
-    queryFn: () => api.get<AccommodationData>("/accommodation"),
+    ...accommodationQuery,
     refetchInterval: 30_000,
   })
 }

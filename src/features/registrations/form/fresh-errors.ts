@@ -1,4 +1,10 @@
-import { get, type FieldErrors, type FieldValues, type Path, type UseFormReturn } from "react-hook-form"
+import {
+  get,
+  type FieldErrors,
+  type FieldValues,
+  type Path,
+  type UseFormReturn,
+} from "react-hook-form"
 
 /**
  * Every field path currently holding an error, e.g. "members.1.arrivalDate".

@@ -3,7 +3,6 @@ import * as React from "react"
 import { useFieldArray, useFormContext } from "react-hook-form"
 
 import { Button } from "@/components/ui/button"
-import { Checkbox } from "@/components/ui/choice"
 import {
   Dialog,
   DialogContent,
@@ -14,6 +13,7 @@ import { DigitsInput, Field, Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/primitives"
 import { PhoneInput } from "@/components/ui/phone-input"
 import { NativeSelect } from "@/components/ui/select"
+import { useT } from "@/i18n/context"
 import { DEFAULT_COUNTRY_CODE, formatMobile, toE164 } from "@/lib/phone"
 
 import { GENDERS, RELATIONS } from "../types"
@@ -21,11 +21,13 @@ import { MobileVerification } from "./MobileVerification"
 import { matchGenderToRelation } from "./relation"
 import { useFormOptions } from "./form-options"
 import {
+  asksYouthConvention,
   emptyMember,
   relationAgeHints,
   type MemberFormValues,
   type RegistrationFormValues,
 } from "./schema"
+import { YesNoQuestion } from "./YesNoQuestion"
 
 /** Whether a card has anything typed into it — an empty one is removed without asking. */
 const isFilledIn = (member: MemberFormValues | undefined) =>
@@ -48,6 +50,7 @@ export function MembersStep() {
     setValue,
     formState: { errors },
   } = useFormContext<RegistrationFormValues>()
+  const { t, lang } = useT()
 
   // "Gender changed to Male" under the person whose relation just set it, for
   // three seconds. Keyed by the card's id, not its index, so removing someone
@@ -70,7 +73,10 @@ export function MembersStep() {
       relation
     )
     if (gender)
-      setGenderNote({ id, text: `Gender changed to ${GENDERS[gender]}` })
+      setGenderNote({
+        id,
+        text: t("Gender changed to {gender}", { gender: t(GENDERS[gender]) }),
+      })
   }
   const { fields, append, remove } = useFieldArray({ control, name: "members" })
   const type = watch("type")
@@ -86,7 +92,7 @@ export function MembersStep() {
     isFilledIn(getValues(`members.${index}`))
       ? setRemoving(index)
       : remove(index)
-  const ageHints = relationAgeHints({ type, members })
+  const ageHints = relationAgeHints({ type, members }, t)
 
   const addMember = () => {
     // A new person inherits the party's dates if someone has already split
@@ -107,9 +113,20 @@ export function MembersStep() {
     <div className="flex flex-col gap-4">
       <p className="text-xs/relaxed text-muted-foreground">
         {type === "individual"
-          ? "Your details as they appear on your ID."
-          : "Add everyone who is coming, including children. The first person is the contact for this registration."}
+          ? t("Your details as they appear on your ID.")
+          : t(
+              "Add everyone who is coming, including children. The first person is the contact for this registration."
+            )}
       </p>
+
+      {/* Names are saved as typed, and the team searches them in English. */}
+      {lang !== "en" && (
+        <p className="-mt-2 rounded-md bg-amber-500/10 px-3 py-2 text-2xs/relaxed text-amber-800 dark:text-amber-300">
+          {t(
+            "Please write names in English letters (A–Z), e.g. Ramesh Patel, so the team can find you at the desk."
+          )}
+        </p>
+      )}
 
       {fields.map((field, index) => {
         const memberErrors = errors.members?.[index]
@@ -119,13 +136,16 @@ export function MembersStep() {
             key={field.id}
             className="flex flex-col gap-3 rounded-lg border border-border p-4"
           >
-            <legend className="sr-only">Person {index + 1}</legend>
+            <legend className="sr-only">
+              {t("Person {n}", { n: index + 1 })}
+            </legend>
             <div className="flex items-center justify-between gap-2">
               <div className="flex items-center gap-2">
                 <span className="font-heading text-xs font-medium">
-                  {members[index]?.fullName || `Person ${index + 1}`}
+                  {members[index]?.fullName ||
+                    t("Person {n}", { n: index + 1 })}
                 </span>
-                {isPrimary && <Badge>Primary contact</Badge>}
+                {isPrimary && <Badge>{t("Primary contact")}</Badge>}
               </div>
               {!isPrimary && (
                 <Button
@@ -133,31 +153,31 @@ export function MembersStep() {
                   variant="ghost"
                   size="sm"
                   onClick={() => askRemove(index)}
-                  aria-label={`Remove person ${index + 1}`}
+                  aria-label={t("Remove person {n}", { n: index + 1 })}
                 >
                   <RiDeleteBinLine />
-                  Remove
+                  {t("Remove")}
                 </Button>
               )}
             </div>
 
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
               <Field
-                label="Full name"
+                label={t("Full name")}
                 required
                 error={memberErrors?.fullName?.message}
                 className="col-span-2"
               >
                 <Input
                   id={`members.${index}.fullName`}
-                  placeholder="First and last name"
+                  placeholder={t("First and last name")}
                   autoComplete={isPrimary ? "name" : "off"}
                   aria-invalid={!!memberErrors?.fullName}
                   {...register(`members.${index}.fullName`)}
                 />
               </Field>
               <Field
-                label="Gender"
+                label={t("Gender")}
                 required
                 error={memberErrors?.gender?.message}
               >
@@ -167,11 +187,11 @@ export function MembersStep() {
                   {...register(`members.${index}.gender`)}
                 >
                   <option value="" disabled>
-                    Select
+                    {t("Select")}
                   </option>
                   {Object.entries(GENDERS).map(([value, label]) => (
                     <option key={value} value={value}>
-                      {label}
+                      {t(label)}
                     </option>
                   ))}
                 </NativeSelect>
@@ -188,11 +208,15 @@ export function MembersStep() {
                   )}
                 </p>
               </Field>
-              <Field label="Age" required error={memberErrors?.age?.message}>
+              <Field
+                label={t("Age")}
+                required
+                error={memberErrors?.age?.message}
+              >
                 <DigitsInput
                   id={`members.${index}.age`}
                   maxLength={3}
-                  placeholder="Years"
+                  placeholder={t("Years")}
                   aria-invalid={!!memberErrors?.age}
                   {...register(`members.${index}.age`)}
                 />
@@ -202,8 +226,10 @@ export function MembersStep() {
                 // Changing the contact's number online would let anyone with
                 // the old number hand the booking to another. The desk can.
                 <Field
-                  label="Mobile"
-                  hint="To change the contact number, ask your mandal sanchalak or the desk."
+                  label={t("Mobile")}
+                  hint={t(
+                    "To change the contact number, ask your mandal sanchalak or the desk."
+                  )}
                   className="col-span-2"
                 >
                   <Input
@@ -222,7 +248,7 @@ export function MembersStep() {
                 </Field>
               ) : (
                 <Field
-                  label={isPrimary ? "Mobile" : "Mobile (optional)"}
+                  label={isPrimary ? t("Mobile") : t("Mobile (optional)")}
                   required={isPrimary}
                   error={memberErrors?.mobile?.message}
                   className="col-span-2"
@@ -244,7 +270,7 @@ export function MembersStep() {
 
               {type === "family" && !isPrimary && (
                 <Field
-                  label="Relation to primary contact (optional)"
+                  label={t("Relation to primary contact (optional)")}
                   error={memberErrors?.relation?.message}
                   className="col-span-2"
                 >
@@ -260,10 +286,10 @@ export function MembersStep() {
                     })}
                   >
                     {/* Selectable, not a disabled placeholder, so a pick can be undone. */}
-                    <option value="">Not specified</option>
+                    <option value="">{t("Not specified")}</option>
                     {RELATIONS.map((relation) => (
                       <option key={relation} value={relation}>
-                        {relation}
+                        {t(relation)}
                       </option>
                     ))}
                   </NativeSelect>
@@ -279,18 +305,11 @@ export function MembersStep() {
 
             {isPrimary && mode !== "edit-self" && <MobileVerification />}
 
-            <Checkbox
-              id={`members.${index}.needsAssistance`}
-              label="Needs special assistance"
-              description="Senior, wheelchair, medical condition or diet the hosts should plan for."
-              {...register(`members.${index}.needsAssistance`)}
-            />
-            {members[index]?.needsAssistance && (
-              <Input
-                id={`members.${index}.assistanceNote`}
-                placeholder="e.g. Wheelchair user, needs a ground-floor room"
-                aria-label="Assistance details"
-                {...register(`members.${index}.assistanceNote`)}
+            {/* Optional, and only for those 40 or under. */}
+            {asksYouthConvention(members[index]?.age ?? "") && (
+              <YesNoQuestion
+                name={`members.${index}.youthConvention`}
+                question={t("Will attend the Youth Convention?")}
               />
             )}
           </fieldset>
@@ -310,7 +329,7 @@ export function MembersStep() {
           className="self-start"
         >
           <RiAddLine />
-          Add another person
+          {t("Add another person")}
         </Button>
       )}
 
@@ -320,8 +339,13 @@ export function MembersStep() {
       >
         <DialogContent>
           <DialogHeader
-            title={`Remove ${(removing !== undefined && members[removing]?.fullName.trim()) || `person ${(removing ?? 0) + 1}`}?`}
-            description="Their details are taken off this registration."
+            title={t("Remove {name}?", {
+              name:
+                (removing !== undefined &&
+                  members[removing]?.fullName.trim()) ||
+                t("person {n}", { n: (removing ?? 0) + 1 }),
+            })}
+            description={t("Their details are taken off this registration.")}
           />
           <DialogFooter>
             <Button
@@ -329,7 +353,7 @@ export function MembersStep() {
               size="lg"
               onClick={() => setRemoving(undefined)}
             >
-              Keep
+              {t("Keep")}
             </Button>
             <Button
               variant="destructive"
@@ -339,7 +363,7 @@ export function MembersStep() {
                 setRemoving(undefined)
               }}
             >
-              Remove
+              {t("Remove")}
             </Button>
           </DialogFooter>
         </DialogContent>

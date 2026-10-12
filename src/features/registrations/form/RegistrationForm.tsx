@@ -20,6 +20,8 @@ import {
   DialogHeader,
 } from "@/components/ui/dialog"
 import { isLocalMandal } from "@/config/event"
+import { useT } from "@/i18n/context"
+import { serverMessage } from "@/i18n/translate"
 import { ApiError } from "@/lib/api"
 
 import {
@@ -39,7 +41,7 @@ import {
   STEP_FIELDS,
   contactMobile,
   fromRegistration,
-  registrationFormSchema,
+  makeRegistrationFormSchema,
   relatedFields,
   toNewRegistration,
   type RegistrationFormValues,
@@ -49,7 +51,7 @@ import { StayTravelStep } from "./StayTravelStep"
 const STEPS = [
   { title: "Registration" },
   { title: "People" },
-  { title: "Stay & travel" },
+  { title: "Mahotsav - Stay & Travel" },
   { title: "Review" },
 ] as const
 
@@ -146,6 +148,10 @@ export function RegistrationForm({
       ? Math.min(urlStep - 1, reached)
       : (restored?.step ?? 0)
 
+  const { t, lang } = useT()
+  // The rules are the same in every language; only their messages differ.
+  const schema = React.useMemo(() => makeRegistrationFormSchema(lang), [lang])
+
   const topRef = React.useRef<HTMLDivElement>(null)
   const formRef = React.useRef<HTMLFormElement>(null)
 
@@ -160,7 +166,7 @@ export function RegistrationForm({
         : updateOwn
 
   const form = useForm<RegistrationFormValues>({
-    resolver: zodResolver(registrationFormSchema),
+    resolver: zodResolver(schema),
     defaultValues: restored
       ? {
           ...restored.values,
@@ -183,6 +189,15 @@ export function RegistrationForm({
     () => keepErrorsFresh(form, live ? relatedFields : undefined),
     [form, live]
   )
+
+  // Errors on screen are in the language they were found in: switching
+  // language checks the step again, so they come back in the new one.
+  const lastLang = React.useRef(lang)
+  React.useEffect(() => {
+    if (lastLang.current === lang) return
+    lastLang.current = lang
+    if (attempted.includes(step)) void form.trigger([...STEP_FIELDS[step]])
+  }, [lang, attempted, step, form])
 
   /**
    * Keeps the draft in step with the form: saved a moment after typing stops
@@ -270,12 +285,14 @@ export function RegistrationForm({
             form.setValue("takenMobile", contact)
             form.setValue(
               "takenCode",
-              error.message.match(/YC-\d+/)?.[0] ?? "another registration"
+              error.message.match(/YC-\d+/)?.[0] ?? t("another registration")
             )
           }
           markAttempted(1)
           goTo(1)
-          form.setError("members.0.mobile", { message: error.message })
+          form.setError("members.0.mobile", {
+            message: serverMessage(t, error.message),
+          })
           saving.reset()
           return
         }
@@ -293,8 +310,9 @@ export function RegistrationForm({
           markAttempted(1)
           goTo(1)
           form.setError("members.0.mobile", {
-            message:
-              "Verification expired. Send a new code to confirm this number.",
+            message: t(
+              "Verification expired. Send a new code to confirm this number."
+            ),
           })
           saving.reset()
         }
@@ -309,7 +327,7 @@ export function RegistrationForm({
     useWatch({ control: form.control, name: "mandal" })
   )
   const titleOf = (index: number) =>
-    index === 2 && local ? "Dates" : STEPS[index].title
+    t(index === 2 && local ? "Dates" : STEPS[index].title)
 
   const editingText = mode !== "new"
 
@@ -327,7 +345,7 @@ export function RegistrationForm({
         <div ref={topRef} className="flex scroll-mt-20 flex-col gap-5">
           <ol
             className="-my-2 grid grid-cols-4 gap-1.5 sm:-my-1 sm:gap-2"
-            aria-label="Registration steps"
+            aria-label={t("Registration steps")}
           >
             {STEPS.map((item, index) => {
               const done = index < step
@@ -372,7 +390,10 @@ export function RegistrationForm({
             <h2 className="flex min-w-0 flex-wrap items-baseline gap-x-2 font-heading text-base font-medium">
               {titleOf(step)}
               <span className="font-mono text-xs font-normal text-muted-foreground tabular-nums">
-                Step {step + 1} of {STEPS.length}
+                {t("Step {n} of {total}", {
+                  n: step + 1,
+                  total: STEPS.length,
+                })}
               </span>
             </h2>
             {filled && (
@@ -384,7 +405,7 @@ export function RegistrationForm({
                 className="shrink-0 text-muted-foreground"
               >
                 <RiRestartLine />
-                {editingText ? "Discard changes" : "Clear form"}
+                {editingText ? t("Discard changes") : t("Clear form")}
               </Button>
             )}
           </div>
@@ -392,29 +413,33 @@ export function RegistrationForm({
           {showRestored && (
             <div className="-mt-1 flex items-start justify-between gap-2 rounded-md bg-muted px-3 py-2">
               <p className="text-2xs/relaxed text-muted-foreground">
-                {editingText ? (
-                  <>
-                    Your unsaved changes were kept on this device. Use{" "}
-                    <span className="font-medium text-foreground">
-                      Discard changes
-                    </span>{" "}
-                    to go back to what is saved.
-                  </>
-                ) : (
-                  <>
-                    Picked up where you left off — what you entered was saved on
-                    this device. Use{" "}
-                    <span className="font-medium text-foreground">
-                      Clear form
-                    </span>{" "}
-                    to start again.
-                  </>
-                )}
+                {(() => {
+                  // The button's name sits mid-sentence, where each language
+                  // puts it.
+                  const [before, after] = (
+                    editingText
+                      ? t(
+                          "Your unsaved changes were kept on this device. Use {action} to go back to what is saved."
+                        )
+                      : t(
+                          "Picked up where you left off — what you entered was saved on this device. Use {action} to start again."
+                        )
+                  ).split("{action}")
+                  return (
+                    <>
+                      {before}
+                      <span className="font-medium text-foreground">
+                        {editingText ? t("Discard changes") : t("Clear form")}
+                      </span>
+                      {after}
+                    </>
+                  )
+                })()}
               </p>
               <button
                 type="button"
                 onClick={() => setShowRestored(false)}
-                aria-label="Dismiss"
+                aria-label={t("Dismiss")}
                 className="-m-1 rounded-sm p-1 text-muted-foreground hover:text-foreground"
               >
                 <RiCloseLine className="size-3.5" />
@@ -426,12 +451,16 @@ export function RegistrationForm({
             <DialogContent>
               <DialogHeader
                 title={
-                  editingText ? "Discard your changes?" : "Clear the form?"
+                  editingText
+                    ? t("Discard your changes?")
+                    : t("Clear the form?")
                 }
                 description={
                   editingText
-                    ? "The registration goes back to how it is saved."
-                    : "Everything entered in all four steps is removed, and you start again from step 1."
+                    ? t("The registration goes back to how it is saved.")
+                    : t(
+                        "Everything entered in all four steps is removed, and you start again from step 1."
+                      )
                 }
               />
               <DialogFooter>
@@ -440,10 +469,10 @@ export function RegistrationForm({
                   size="lg"
                   onClick={() => setConfirmClear(false)}
                 >
-                  Keep editing
+                  {t("Keep editing")}
                 </Button>
                 <Button variant="destructive" size="lg" onClick={clearForm}>
-                  {editingText ? "Discard changes" : "Clear form"}
+                  {editingText ? t("Discard changes") : t("Clear form")}
                 </Button>
               </DialogFooter>
             </DialogContent>
@@ -469,8 +498,12 @@ export function RegistrationForm({
                 {/* A 4xx carries the server's own reason (a rule the form
                   missed); anything else is the network or the server. */}
                 {saving.error instanceof ApiError && saving.error.status < 500
-                  ? `The registration could not be saved: ${saving.error.message}`
-                  : "The registration could not be saved. Check your connection and submit again."}
+                  ? t("The registration could not be saved: {reason}", {
+                      reason: serverMessage(t, saving.error.message),
+                    })
+                  : t(
+                      "The registration could not be saved. Check your connection and submit again."
+                    )}
               </p>
             )}
 
@@ -488,7 +521,7 @@ export function RegistrationForm({
                 disabled={step === 0 || form.formState.isSubmitting}
               >
                 <RiArrowLeftLine />
-                Back
+                {t("Back")}
               </Button>
               <Button
                 type="submit"
@@ -501,9 +534,9 @@ export function RegistrationForm({
                 )}
                 {isLast
                   ? editingText
-                    ? "Save changes"
-                    : "Submit registration"
-                  : "Continue"}
+                    ? t("Save changes")
+                    : t("Submit registration")
+                  : t("Continue")}
                 {!isLast && <RiArrowRightLine />}
               </Button>
             </div>

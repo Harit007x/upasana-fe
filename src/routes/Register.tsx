@@ -34,6 +34,7 @@ function RegisterPage() {
       <PublicHeader
         eyebrow={t("Registration open")}
         action={<LanguagePicker />}
+        banner
       >
         <p className="max-w-prose text-xs/relaxed text-muted-foreground">
           {t(

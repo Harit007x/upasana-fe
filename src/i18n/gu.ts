@@ -25,6 +25,8 @@ export const GU: Record<string, string> = {
   Schedule: "કાર્યક્રમ",
   Register: "નોંધણી",
   "Event pages": "મહોત્સવનાં પેજ",
+  "Anoopam Youth International Convention 2027, 29 January – 1 February 2027, Ahmedabad":
+    "અનુપમ યુથ ઇન્ટરનેશનલ કન્વેન્શન 2027, 29 જાન્યુઆરી – 1 ફેબ્રુઆરી 2027, અમદાવાદ",
 
   // ------------------------------------------------------------ the wizard
   Registration: "નોંધણી",

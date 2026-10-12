@@ -7,6 +7,7 @@ import {
 import { cn } from "cn"
 import { NavLink } from "react-router"
 
+import eventBanner from "@/assets/event-banner.jpg"
 import { EVENT, formatEventRange } from "@/config/event"
 import { useT } from "@/i18n/context"
 
@@ -23,12 +24,15 @@ const PUBLIC_NAV = [
 export function PublicHeader({
   eyebrow,
   action,
+  banner,
   children,
 }: {
   /** The small line above the event name, e.g. "Registration open". */
   eyebrow: string
   /** Beside the eyebrow, at the top right: the language picker. */
   action?: React.ReactNode
+  /** Show the event poster under the eyebrow. It is 2:1, sized at 2× the column. */
+  banner?: boolean
   children?: React.ReactNode
 }) {
   const { t, lang } = useT()
@@ -41,7 +45,25 @@ export function PublicHeader({
           </span>
           {action}
         </div>
-        <h1 className="font-heading text-2xl font-semibold text-balance">
+        {banner && (
+          <img
+            src={eventBanner}
+            width={1344}
+            height={672}
+            alt={t(
+              "Anoopam Youth International Convention 2027, 29 January – 1 February 2027, Ahmedabad"
+            )}
+            fetchPriority="high"
+            className="aspect-2/1 w-full rounded-lg object-cover shadow-sm ring-1 ring-border"
+          />
+        )}
+        {/* The banner carries the event name; the heading stays for screen readers. */}
+        <h1
+          className={cn(
+            "font-heading text-2xl font-semibold text-balance",
+            banner && "sr-only"
+          )}
+        >
           {EVENT.name}
         </h1>
         <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs/relaxed text-muted-foreground">

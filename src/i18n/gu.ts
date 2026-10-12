@@ -82,9 +82,7 @@ export const GU: Record<string, string> = {
     "બીજી 1 વ્યક્તિની વિગતો બાજુ પર રાખી છે, કાઢી નથી. પાછી લાવવા ફરી 'પરિવાર' પસંદ કરો.",
   "{n} other people are kept aside, not deleted. Switch back to Family to bring them back.":
     "બીજી {n} વ્યક્તિઓની વિગતો બાજુ પર રાખી છે, કાઢી નથી. પાછી લાવવા ફરી 'પરિવાર' પસંદ કરો.",
-  "Mandal / Travelling from": "મંડળ / ક્યાંથી આવો છો",
-  "Your satsang mandal, or the place you are travelling from.":
-    "તમારું સત્સંગ મંડળ, અથવા તમે જ્યાંથી આવો છો તે સ્થળ.",
+  "Satsang mandal": "સત્સંગ મંડળ",
   "You register people from your own mandal.":
     "તમે ફક્ત તમારા મંડળની વ્યક્તિઓની નોંધણી કરો છો.",
   "Select mandal": "મંડળ પસંદ કરો",
@@ -92,7 +90,6 @@ export const GU: Record<string, string> = {
   // Mandals: shown in Gujarati, saved in English.
   Ahmedabad: "અમદાવાદ",
   Dahegam: "દહેગામ",
-  Naroda: "નરોડા",
   Gandhinagar: "ગાંધીનગર",
   Surat: "સુરત",
   Vadodara: "વડોદરા",
@@ -109,7 +106,6 @@ export const GU: Record<string, string> = {
   "New Zealand": "ન્યુઝીલેન્ડ",
   Australia: "ઓસ્ટ્રેલિયા",
   "Dubai (UAE)": "દુબઈ (UAE)",
-  "Not in a mandal": "કોઈ મંડળમાં નથી",
 
   // Airport pickup, for mandals abroad.
   "Ahmedabad airport pickup": "અમદાવાદ એરપોર્ટ પિકઅપ",
@@ -251,6 +247,7 @@ export const GU: Record<string, string> = {
   "GSRTC or private bus.": "GSRTC કે ખાનગી બસ.",
   "Anything else.": "બીજું કંઈ.",
   Local: "સ્થાનિક",
+  "Not filled": "ભરેલ નથી",
 
   "Number of vehicles": "વાહનોની સંખ્યા",
   "Up to {max} for {people} people.": "{people} વ્યક્તિ માટે વધુમાં વધુ {max}.",
@@ -337,10 +334,6 @@ export const GU: Record<string, string> = {
   Needed: "જોઈએ",
   "Not needed": "જરૂર નથી",
   "for {names}": "{names} માટે",
-  "Anything else we should know? (optional)":
-    "બીજું કંઈ જણાવવું છે? (વૈકલ્પિક)",
-  "Food preferences, seva you would like to offer, people you are travelling with…":
-    "ભોજનની પસંદગી, તમે કરવા માંગો તે સેવા, તમારી સાથે આવનાર વ્યક્તિઓ…",
   "These details are correct": "આ વિગતો સાચી છે",
   "I agree to follow the Mandir's guidelines during the event.":
     "મહોત્સવ દરમિયાન હું મંદિરના નિયમોનું પાલન કરીશ.",

@@ -28,6 +28,8 @@ export const TRAVEL_MODES = {
   other: "Other",
   /** Set for local mandals (isLocalMandal), who are not asked. Never offered. */
   local: "Local",
+  /** Set when a mandal stopped being local before travel was asked. Never offered. */
+  not_filled: "Not filled",
 } as const
 export type TravelMode = keyof typeof TRAVEL_MODES
 

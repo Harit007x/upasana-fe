@@ -30,7 +30,6 @@ export type StayDate = (typeof STAY_DATES)[number]
 export const MANDALS = [
   "Ahmedabad",
   "Dahegam",
-  "Naroda",
   "Gandhinagar",
   "Surat",
   "Vadodara",
@@ -57,13 +56,7 @@ export const NO_MANDAL = "Not in a mandal"
  * these. Their devotees are not asked how they travel or whether they need a
  * bed — they need neither. Mirrors isLocalMandal on the server.
  */
-const LOCAL_MANDALS: readonly string[] = [
-  "Dahegam",
-  "Naroda",
-  "Gandhinagar",
-  "Vadodara",
-  "Rajkot",
-]
+const LOCAL_MANDALS: readonly string[] = ["Dahegam", "Gandhinagar"]
 export const isLocalMandal = (mandal: string) =>
   mandal.startsWith("Ahmedabad") || LOCAL_MANDALS.includes(mandal)
 

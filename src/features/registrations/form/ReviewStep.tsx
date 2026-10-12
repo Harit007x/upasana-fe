@@ -2,7 +2,7 @@ import { useFormContext } from "react-hook-form"
 
 import { Checkbox } from "@/components/ui/choice"
 import { Badge } from "@/components/ui/primitives"
-import { Field, RequiredMark, Textarea } from "@/components/ui/input"
+import { RequiredMark } from "@/components/ui/input"
 import { isLocalMandal, type StayDate, type TimeSlot } from "@/config/event"
 import { useT } from "@/i18n/context"
 import type { Lang } from "@/i18n/translate"
@@ -113,7 +113,7 @@ export function ReviewStep({
           {values.type !== "individual" && (
             <Row label={t("Name")}>{values.groupName}</Row>
           )}
-          <Row label={t("Mandal / Travelling from")}>{t(values.mandal)}</Row>
+          <Row label={t("Satsang mandal")}>{t(values.mandal)}</Row>
           {india?.arrival && (
             <Row label={t("Airport pickup")}>
               {formatIndiaFlight(india.arrival, lang)}
@@ -295,16 +295,6 @@ export function ReviewStep({
           )}
         </dl>
       </section>
-
-      <Field label={t("Anything else we should know? (optional)")}>
-        <Textarea
-          id="notes"
-          placeholder={t(
-            "Food preferences, seva you would like to offer, people you are travelling with…"
-          )}
-          {...register("notes")}
-        />
-      </Field>
 
       <div className="flex flex-col gap-1.5">
         <Checkbox

@@ -4,7 +4,7 @@ import { Controller, useFieldArray, useFormContext } from "react-hook-form"
 import { ChoiceGroup } from "@/components/ui/choice"
 import { Field, Input } from "@/components/ui/input"
 import { NativeSelect } from "@/components/ui/select"
-import { MANDALS, NO_MANDAL } from "@/config/event"
+import { MANDALS } from "@/config/event"
 import { useT } from "@/i18n/context"
 
 import type { RegistrationType } from "../types"
@@ -127,7 +127,7 @@ export function PartyStep() {
         {lockedMandal ? (
           // A sanchalak registers people from their own mandal only.
           <Field
-            label={t("Mandal / Travelling from")}
+            label={t("Satsang mandal")}
             required
             hint={t("You register people from your own mandal.")}
           >
@@ -141,11 +141,8 @@ export function PartyStep() {
           </Field>
         ) : (
           <Field
-            label={t("Mandal / Travelling from")}
+            label={t("Satsang mandal")}
             required
-            hint={t(
-              "Your satsang mandal, or the place you are travelling from."
-            )}
             error={errors.mandal?.message}
           >
             <NativeSelect
@@ -162,7 +159,6 @@ export function PartyStep() {
                   {t(mandal)}
                 </option>
               ))}
-              <option value={NO_MANDAL}>{t(NO_MANDAL)}</option>
             </NativeSelect>
           </Field>
         )}

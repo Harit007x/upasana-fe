@@ -2,7 +2,6 @@ import { z } from "zod"
 
 import {
   MANDALS,
-  NO_MANDAL,
   OVERSEAS_MANDALS,
   YOUTH_MAX_AGE,
   isLocalMandal,
@@ -55,10 +54,13 @@ import {
 const isIn = (list: readonly string[]) => (value: string) =>
   list.includes(value)
 const MEAL_ANSWERS = ["yes", "no"]
-/** The travel modes the form offers: all but "local", which is set, not picked. */
+/** The travel modes the form offers: all but "local" and "not_filled", which are set, not picked. */
 export const TRAVEL_CHOICES = (
   Object.keys(TRAVEL_MODES) as TravelMode[]
-).filter((mode): mode is Exclude<TravelMode, "local"> => mode !== "local")
+).filter(
+  (mode): mode is Exclude<TravelMode, "local" | "not_filled"> =>
+    mode !== "local" && mode !== "not_filled"
+)
 
 /** Whether someone of this age (as typed) is asked about the Youth Convention. */
 export const asksYouthConvention = (age: string) =>
@@ -197,9 +199,7 @@ export function makeRegistrationFormSchema(lang: Lang = "en") {
     .object({
       type: z.enum(["individual", "family"]),
       groupName: z.string().trim(),
-      mandal: z
-        .string()
-        .refine(isIn([...MANDALS, NO_MANDAL]), t("Select your mandal")),
+      mandal: z.string().refine(isIn(MANDALS), t("Select your mandal")),
       members: z.array(memberSchema),
       sameSchedule: z.boolean(),
       // The party's dates. Only asked for while everyone travels together —

@@ -111,6 +111,61 @@ const AGE_BANDS = [
 
 const ageBand = (age: number) => AGE_BANDS.find((band) => age <= band.max)!
 
+/** Whole numbers from `min` to `max`, both counted; `max` may be Infinity. */
+export type Range = { min: number; max: number }
+
+/**
+ * A range as the range filters (age, party size) write it: "80+" (80 and
+ * over), "-14" (14 and under), "25-35", "40" (just 40). Without these the filters offered only
+ * fixed groups, and the Assistant, asked for devotees over 80, answered with
+ * everyone over 60 under a title that said 80.
+ */
+export function parseRange(value: string): Range | null {
+  const match = /^(?:(\d{1,3})\+|(\d{1,3})?-(\d{1,3})?|(\d{1,3}))$/.exec(value)
+  if (!match) return null
+  const [, over, from, to, exactly] = match
+  if (exactly != null) return { min: Number(exactly), max: Number(exactly) }
+  if (over != null) return { min: Number(over), max: Infinity }
+  if (from == null && to == null) return null
+  const range = {
+    min: from == null ? 0 : Number(from),
+    max: to == null ? Infinity : Number(to),
+  }
+  return range.min <= range.max ? range : null
+}
+
+/** A range as the filter's value: the inverse of `parseRange`. */
+export const rangeValue = ({ min, max }: Range) =>
+  max === Infinity ? `${min}+` : min === max ? `${min}` : `${min || ""}-${max}`
+
+const inRange = (n: number, range: Range | null) =>
+  range != null && n >= range.min && n <= range.max
+
+/** The age filter's named groups, which are not bands. */
+const AGE_GROUPS: Record<string, Range> = {
+  child: { min: 0, max: 11 },
+  adult: { min: 18, max: Infinity },
+  youth: { min: 0, max: 40 },
+}
+
+/** An age filter's value: a named group, or any range — the bands' keys ("5-11", "60+") are ranges. */
+export const parseAgeRange = (value: string) =>
+  Object.hasOwn(AGE_GROUPS, value) ? AGE_GROUPS[value] : parseRange(value)
+
+/** "80 and over", "14 and under", "25 – 35". */
+export function ageRangeLabel({ min, max }: Range) {
+  if (max === Infinity) return `${min} and over`
+  if (min === 0) return `${max} and under`
+  return min === max ? `${min}` : `${min} – ${max}`
+}
+
+/** "6 or more people", "Up to 2 people", "3 – 5 people". */
+export function partySizeLabel({ min, max }: Range) {
+  if (max === Infinity) return `${min} or more people`
+  if (min <= 1) return max === 1 ? "1 person" : `Up to ${max} people`
+  return min === max ? `${min} people` : `${min} – ${max} people`
+}
+
 /**
  * How they leave Ahmedabad: the journey home they gave with a drop, else the
  * way they came.
@@ -176,7 +231,26 @@ type FilterDef = {
   group: FilterGroup
   options: Option[]
   test: (person: Person, value: string) => boolean
+  /**
+   * For a filter that takes values beyond its options (an age range, a
+   * landing day): whether a value is one, and how to show it.
+   */
+  free?: {
+    accepts: (value: string) => boolean
+    label: (value: string) => string
+  }
 }
+
+/** Whether a filter can take this value. */
+export const filterAccepts = (filter: FilterDef, value: string) =>
+  filter.options.some(([v]) => v === value) ||
+  (filter.free?.accepts(value) ?? false)
+
+/** A filter's value as people read it: "60 and over", "29 Jan". */
+export const filterValueLabel = (filter: FilterDef, value: string) =>
+  filter.options.find(([v]) => v === value)?.[1] ??
+  filter.free?.label(value) ??
+  value
 
 export const FILTER_GROUPS = {
   who: "Who",
@@ -221,14 +295,29 @@ export const FILTERS: FilterDef[] = [
       ["adult", "Adults (18 and over)"],
       ["youth", "40 and under"],
     ],
-    test: ({ member: { age } }, v) =>
-      v === "child"
-        ? age < 12
-        : v === "adult"
-          ? age >= 18
-          : v === "youth"
-            ? age <= 40
-            : ageBand(age).key === v,
+    test: ({ member }, v) => inRange(member.age, parseAgeRange(v)),
+    free: {
+      accepts: (v) => parseAgeRange(v) != null,
+      label: (v) => ageRangeLabel(parseAgeRange(v)!),
+    },
+  },
+  {
+    // The whole registration, whoever else the filters pick: a family of six
+    // needs a car of that size however many of them are children.
+    key: "size",
+    label: "Party size",
+    group: "who",
+    options: [
+      ["1", "1 person"],
+      ["2-4", "2 – 4 people"],
+      ["5+", "5 or more people"],
+    ],
+    test: ({ registration }, v) =>
+      inRange(registration.members.length, parseRange(v)),
+    free: {
+      accepts: (v) => parseRange(v) != null,
+      label: (v) => partySizeLabel(parseRange(v)!),
+    },
   },
   {
     key: "type",
@@ -364,6 +453,7 @@ export const FILTERS: FilterDef[] = [
     options: [],
     test: ({ registration }, v) =>
       registration.indiaTravel?.arrival?.date === v,
+    free: { accepts: (v) => /^\d{4}-\d{2}-\d{2}$/.test(v), label: formatDay },
   },
 
   // Needs
@@ -852,7 +942,7 @@ export function readReport(params: URLSearchParams): Report {
     filters: Object.fromEntries(
       FILTERS.flatMap((f) => {
         const value = params.get(f.key)
-        return value ? [[f.key, value]] : []
+        return value && filterAccepts(f, value) ? [[f.key, value]] : []
       })
     ),
     by: isKey(DIMENSIONS, by) ? by : "mandal",
@@ -907,8 +997,7 @@ export function describeReport(report: Report, filters = FILTERS) {
   const parts = filters.flatMap((f) => {
     const value = report.filters[f.key]
     if (!value) return []
-    const label = f.options.find(([v]) => v === value)?.[1] ?? formatDay(value)
-    return [`${f.label}: ${label}`]
+    return [`${f.label}: ${filterValueLabel(f, value)}`]
   })
   return [
     `Registrations: ${STATUS_SETS[report.status].label.toLowerCase()}${report.dummy ? ", with dummy data" : ""}`,

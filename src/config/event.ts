@@ -9,7 +9,7 @@
 import { localeOf, translator, type Lang } from "@/i18n/translate"
 
 export const EVENT = {
-  name: "Youth Convention 2026",
+  name: "Dashabdi Mahotsav",
   venue: "Upasana Dham Mandir, Ahmedabad",
   /** The event days, in order: 29 Jan – 1 Feb 2027. ISO dates, no time zone: these are calendar days at the venue. Mirrors EVENT_DAYS on the server. */
   days: ["2027-01-29", "2027-01-30", "2027-01-31", "2027-02-01"],

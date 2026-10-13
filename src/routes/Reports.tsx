@@ -25,7 +25,7 @@ import {
 } from "@/components/ui/dialog"
 import { EmptyState, Skeleton } from "@/components/ui/primitives"
 import { NativeSelect } from "@/components/ui/select"
-import { formatDay } from "@/config/event"
+import { DigitsInput, Label } from "@/components/ui/input"
 import { useGuestVisits } from "@/features/guests/api"
 import { useRegistrations } from "@/features/registrations/api"
 import {
@@ -40,11 +40,17 @@ import {
   FILTERS,
   PRESETS,
   STATUS_SETS,
+  ageRangeLabel,
   applyReport,
   breakDown,
+  filterValueLabel,
   fromPreset,
   isBlank,
   listRows,
+  parseAgeRange,
+  parseRange,
+  partySizeLabel,
+  rangeValue,
   readReport,
   registrationIdsOf,
   reportExport,
@@ -54,6 +60,7 @@ import {
   writeReport,
   type Column,
   type Dimension,
+  type Range,
   type Report,
   type StatusSet,
 } from "@/features/reports/model"
@@ -172,6 +179,94 @@ function OptionButton({
 }
 
 /**
+ * Any range, beside a range filter's fixed choices: age "From 80" for 80 and
+ * over, party size "To 2" for 2 or fewer. Opens on the range already set.
+ */
+const RANGE_FORMS: Record<
+  string,
+  {
+    noun: string
+    parse: (value: string) => Range | null
+    describe: (range: Range) => string
+  }
+> = {
+  age: { noun: "age", parse: parseAgeRange, describe: ageRangeLabel },
+  size: { noun: "people", parse: parseRange, describe: partySizeLabel },
+}
+
+function RangeForm({
+  filterKey,
+  value,
+  onApply,
+}: {
+  filterKey: string
+  value: string | undefined
+  onApply: (value: string) => void
+}) {
+  const { noun, parse, describe } = RANGE_FORMS[filterKey]
+  const current = value ? parse(value) : null
+  const [from, setFrom] = React.useState(current?.min ? `${current.min}` : "")
+  const [to, setTo] = React.useState(
+    current && current.max !== Infinity ? `${current.max}` : ""
+  )
+  const range =
+    from || to
+      ? parseRange(from && !to ? `${Number(from)}+` : `${from}-${to}`)
+      : null
+  const invalid = (from !== "" || to !== "") && range == null
+
+  return (
+    <form
+      className="flex flex-col gap-2 border-t border-border pt-4"
+      onSubmit={(event) => {
+        event.preventDefault()
+        if (range) onApply(rangeValue(range))
+      }}
+    >
+      <p className="text-xs/relaxed font-medium">Or any range</p>
+      <div className="flex items-end gap-2">
+        <div className="flex flex-1 flex-col gap-1">
+          <Label htmlFor={`${filterKey}-from`}>From</Label>
+          <DigitsInput
+            id={`${filterKey}-from`}
+            maxLength={3}
+            value={from}
+            onChange={(e) => setFrom(e.target.value)}
+            aria-invalid={invalid || undefined}
+          />
+        </div>
+        <div className="flex flex-1 flex-col gap-1">
+          <Label htmlFor={`${filterKey}-to`}>To</Label>
+          <DigitsInput
+            id={`${filterKey}-to`}
+            maxLength={3}
+            value={to}
+            onChange={(e) => setTo(e.target.value)}
+            placeholder="Any"
+            aria-invalid={invalid || undefined}
+          />
+        </div>
+        <Button type="submit" size="lg" disabled={!range}>
+          Apply
+        </Button>
+      </div>
+      <p
+        className={cn(
+          "text-2xs/relaxed",
+          invalid ? "text-destructive" : "text-muted-foreground"
+        )}
+      >
+        {invalid
+          ? "“From” must not be more than “To”."
+          : range
+            ? `${describe(range)}, both ends counted.`
+            : `Leave “To” empty for that ${noun === "age" ? "age" : "many"} and over.`}
+      </p>
+    </form>
+  )
+}
+
+/**
  * Adding or changing a filter: first which one (grouped, only those not on
  * yet), then its value. Opened on a chip, it goes straight to the value.
  * "status" stands for which registrations count, with the dummy-data choice.
@@ -268,6 +363,13 @@ function FilterPicker({
                   </OptionButton>
                 ))}
               </div>
+              {Object.hasOwn(RANGE_FORMS, filter.key) && (
+                <RangeForm
+                  filterKey={filter.key}
+                  value={report.filters[filter.key]}
+                  onApply={choose}
+                />
+              )}
             </DialogBody>
             {report.filters[filter.key] && (
               <DialogFooter>
@@ -635,10 +737,7 @@ export function Reports() {
                     <Chip
                       key={f.key}
                       label={f.label}
-                      value={
-                        f.options.find(([v]) => v === value)?.[1] ??
-                        formatDay(value)
-                      }
+                      value={filterValueLabel(f, value)}
                       onEdit={() => setPicker(f.key)}
                       onRemove={() =>
                         set({ filters: { ...report.filters, [f.key]: "" } })

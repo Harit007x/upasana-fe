@@ -36,6 +36,7 @@ import {
   applyReport,
   breakDown,
   describeReport,
+  filterAccepts,
   listRows,
   staysNight,
   takesMeal,
@@ -149,7 +150,6 @@ const ALL_MANDALS = [...MANDALS, NO_MANDAL]
 const STATUS_KEYS = Object.keys(STATUS_SETS) as StatusSet[]
 const DIMENSION_KEYS = Object.keys(DIMENSIONS) as Dimension[]
 const COLUMN_KEYS = Object.keys(COLUMNS) as Column[]
-const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/
 
 /** "a = A; b = B" — values and what they mean, for a schema description. */
 const legend = (options: readonly (readonly [string, string])[]) =>
@@ -185,12 +185,24 @@ const filterSchema = Object.fromEntries(
           type: "string",
           description: `${f.label}: the day an NRI's flight lands in Ahmedabad, an ISO date (it can be before the event).`,
         }
-      : {
-          type: "string",
-          enum: f.options.map(([v]) => v),
-          description:
-            f.key === "mandal" ? f.label : `${f.label}: ${legend(f.options)}.`,
-        },
+      : f.key === "age"
+        ? {
+            type: "string",
+            description: `Age, any range: "80+" = 80 and over, "-14" = 14 and under, "25-35" = 25 to 35, both ends counted. Write exactly the ages asked: "over 80" is "80+", never the nearest group. Also these groups: ${legend(f.options)}.`,
+          }
+        : f.key === "size"
+          ? {
+              type: "string",
+              description: `How many people are in the whole registration (all its members, whatever the other filters pick), any range: "6+" = 6 or more, "-2" = 2 or fewer, "3-5", "4" = exactly 4. "More than 5" is "6+".`,
+            }
+          : {
+              type: "string",
+              enum: f.options.map(([v]) => v),
+              description:
+                f.key === "mandal"
+                  ? f.label
+                  : `${f.label}: ${legend(f.options)}.`,
+            },
   ])
 )
 
@@ -198,7 +210,7 @@ const devoteeReport: ToolDefinition = {
   name: "devotee_report",
   description: `Counts and lists registered devotees with any mix of filters — the Reports screen's engine. Works on one row per person (a member of a registration); dates, meals and beds are per person, travel and pickups belong to the registration. Returns the totals, a breakdown, and the first ${MODEL_ROWS} rows of the list. The admin sees a card with the full list, Excel and PDF buttons, and a link to the same report on the Reports screen.
 
-Use it for every "who / how many" question about devotees: arrivals and departures on a day, travel by train or bus and the pickups and drops they need, NRI airport pickups, meals on a day, beds needed on a night, ages and children, mandals, assistance, the Youth Convention, pending registrations.
+Use it for every "who / how many" question about devotees: arrivals and departures on a day, travel by train or bus and the pickups and drops they need, NRI airport pickups, meals on a day, beds needed on a night, ages and children, family sizes, mandals, assistance, the Youth Convention, pending registrations.
 
 Examples:
 - "Who comes by train on the 29th?" → filters {travel: "train", arrive: "2027-01-29"}, breakdown_by "station", breakdown_across "arriveSlot", list_per "registrations", columns [code, family, contact, contactMobile, mandal, reference, station, arrivalTime, pickup].
@@ -272,15 +284,13 @@ function reportOf(input: Input, defaults: ToolDefaults): Report {
       )
     if (typeof raw !== "string")
       throw new ToolInputError(`Filter "${key}" must be text.`)
-    if (
-      key === "flightDay"
-        ? !ISO_DAY.test(raw)
-        : !def.options.some(([v]) => v === raw)
-    )
+    if (!filterAccepts(def, raw))
       throw new ToolInputError(
         key === "flightDay"
           ? `Filter "flightDay" must be an ISO date like 2027-01-27.`
-          : `"${raw}" is not a value of filter "${key}". Use one of: ${def.options.map(([v]) => v).join(", ")}.`
+          : key === "age" || key === "size"
+            ? `"${raw}" is not a range. Write "80+", "-14", "25-35" or "40"${key === "age" ? `, or one of: ${def.options.map(([v]) => v).join(", ")}` : ""}.`
+            : `"${raw}" is not a value of filter "${key}". Use one of: ${def.options.map(([v]) => v).join(", ")}.`
       )
     filters[key] = raw
   }

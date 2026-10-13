@@ -22,7 +22,6 @@ export function summarize(registrations: Registration[]) {
   const byStatus = Object.fromEntries(
     (
       [
-        "pending",
         "confirmed",
         "checked_in",
         "cancelled",

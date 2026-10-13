@@ -36,10 +36,10 @@ import { GENDERS, TRAVEL_MODES, type Registration } from "./types"
  * One registration in a popup, opened from a row of a list (Reports, the
  * Assistant's cards) — so an admin can work through the list without leaving
  * it: read the details, call or WhatsApp the contact, copy the travel details
- * for a driver, confirm or check in, and go on to the next one.
+ * for a driver, check in, and go on to the next one.
  *
  * `queue` is the list's registrations as they were when the popup opened:
- * confirming one may drop it from a "pending" list, and Next must still go
+ * checking one in may drop it from a "not checked in" list, and Next must still go
  * where the admin expects.
  */
 

@@ -22,8 +22,8 @@ import {
 } from "@/components/ui/dialog"
 import { Field, Input } from "@/components/ui/input"
 import { PhoneInput } from "@/components/ui/phone-input"
-import { NativeSelect } from "@/components/ui/select"
-import { EVENT, MANDALS } from "@/config/event"
+import { MandalSelect } from "@/components/MandalSelect"
+import { EVENT } from "@/config/event"
 import { useSession } from "@/lib/auth-client"
 import {
   DEFAULT_COUNTRY_CODE,
@@ -209,24 +209,16 @@ function InviteStep({
             hint="They see and register only this mandal's devotees."
             error={mandalError}
           >
-            <NativeSelect
+            <MandalSelect
               id="invite-mandal"
               value={mandal}
-              aria-invalid={!!mandalError}
-              onChange={(e) => {
-                setMandal(e.target.value)
+              onChange={(value) => {
+                setMandal(value)
                 setMandalError(undefined)
               }}
-            >
-              <option value="" disabled>
-                Select mandal
-              </option>
-              {MANDALS.map((m) => (
-                <option key={m} value={m}>
-                  {m}
-                </option>
-              ))}
-            </NativeSelect>
+              placeholder="Select mandal"
+              invalid={!!mandalError}
+            />
           </Field>
         )}
 

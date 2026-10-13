@@ -43,7 +43,7 @@ export function isStaff(role: string | null | undefined) {
   return role === "staff" || role === "admin" || role === "sanchalak"
 }
 
-/** May confirm, check in and cancel. Matches `requireReviewer` on the backend. */
+/** May check in, cancel and restore. Matches `requireReviewer` on the backend. */
 export function canReview(role: string | null | undefined) {
   return role === "staff" || role === "admin"
 }

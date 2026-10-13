@@ -275,11 +275,6 @@ export function stayFor(
 
   const problems: string[] = []
   const warnings: string[] = []
-  if (allotted.length > 0 && registration.status === "pending") {
-    problems.push(
-      "Back to pending after a change — confirm it again, then check the rooms still suit"
-    )
-  }
   for (const a of allotted) {
     if (nightsOf(a.member).length === 0) {
       problems.push(
@@ -302,9 +297,7 @@ export function stayFor(
     !registration.accommodationRequired || registration.status === "cancelled"
       ? "not_needed"
       : allotted.length === 0
-        ? registration.status === "pending"
-          ? "unconfirmed"
-          : "to_allot"
+        ? "to_allot"
         : missing.length > 0
           ? "partly"
           : "allotted"

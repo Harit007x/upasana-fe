@@ -34,7 +34,7 @@ const ACCOMMODATION = ["accommodation"] as const
 
 /**
  * `poll`: refetch every so often — for screens volunteers keep open while
- * others register and confirm people (the Accommodation screen).
+ * others register people (the Accommodation screen).
  */
 /** Every registration the caller may see. Also loaded outside a hook (the Assistant). */
 export const registrationsQuery = {

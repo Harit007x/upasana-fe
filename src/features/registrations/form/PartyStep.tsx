@@ -3,8 +3,7 @@ import { Controller, useFieldArray, useFormContext } from "react-hook-form"
 
 import { ChoiceGroup } from "@/components/ui/choice"
 import { Field, Input } from "@/components/ui/input"
-import { NativeSelect } from "@/components/ui/select"
-import { MANDALS } from "@/config/event"
+import { MandalSelect } from "@/components/MandalSelect"
 import { useT } from "@/i18n/context"
 
 import type { RegistrationType } from "../types"
@@ -145,21 +144,21 @@ export function PartyStep() {
             required
             error={errors.mandal?.message}
           >
-            <NativeSelect
-              id="mandal"
-              aria-invalid={!!errors.mandal}
-              {...register("mandal")}
-            >
-              <option value="" disabled>
-                {t("Select mandal")}
-              </option>
-              {/* Shown in the chosen language; saved in English. */}
-              {MANDALS.map((mandal) => (
-                <option key={mandal} value={mandal}>
-                  {t(mandal)}
-                </option>
-              ))}
-            </NativeSelect>
+            <Controller
+              control={control}
+              name="mandal"
+              render={({ field }) => (
+                <MandalSelect
+                  id="mandal"
+                  value={field.value}
+                  onChange={field.onChange}
+                  placeholder={t("Select mandal")}
+                  // Shown in the chosen language; saved in English.
+                  translate={t}
+                  invalid={!!errors.mandal}
+                />
+              )}
+            />
           </Field>
         )}
       </div>

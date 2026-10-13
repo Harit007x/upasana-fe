@@ -139,19 +139,14 @@ const contactOf = (r: Registration) =>
 export const STATUS_SETS = {
   active: {
     label: "Not cancelled",
-    statuses: ["pending", "confirmed", "checked_in"],
-  },
-  approved: {
-    label: "Confirmed or checked in",
     statuses: ["confirmed", "checked_in"],
   },
-  pending: { label: "Pending only", statuses: ["pending"] },
-  confirmed: { label: "Confirmed only", statuses: ["confirmed"] },
+  confirmed: { label: "Not checked in yet", statuses: ["confirmed"] },
   checked_in: { label: "Checked in only", statuses: ["checked_in"] },
   cancelled: { label: "Cancelled only", statuses: ["cancelled"] },
   all: {
     label: "All, with cancelled",
-    statuses: ["pending", "confirmed", "checked_in", "cancelled"],
+    statuses: ["confirmed", "checked_in", "cancelled"],
   },
 } as const satisfies Record<
   string,
@@ -1111,24 +1106,6 @@ export const PRESETS: Preset[] = [
         "mandal",
         "vehicles",
         "arrival",
-      ],
-    },
-  },
-  {
-    label: "Pending review",
-    question: "Registrations still waiting to be confirmed",
-    report: {
-      status: "pending",
-      by: "mandal",
-      mode: "registrations",
-      columns: [
-        "code",
-        "family",
-        "contact",
-        "contactMobile",
-        "mandal",
-        "arrival",
-        "departure",
       ],
     },
   },

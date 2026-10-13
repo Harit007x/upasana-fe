@@ -183,7 +183,7 @@ export function RegistrationDetail() {
 
   const r = registration
   const primary = r.members[0]
-  // Only the seva team confirms, checks in and cancels; a sanchalak edits.
+  // Only the seva team checks in and cancels; a sanchalak edits.
   const reviewer = canReview(session?.user.role)
   const split = hasSplitSchedule(r)
   const males = r.members.filter((m) => m.gender === "male").length

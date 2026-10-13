@@ -33,9 +33,9 @@ export const TRAVEL_MODES = {
 } as const
 export type TravelMode = keyof typeof TRAVEL_MODES
 
+/** "confirmed" is every registration not checked in or cancelled: there is no review step. */
 export const REGISTRATION_STATUSES = {
-  pending: "Pending",
-  confirmed: "Confirmed",
+  confirmed: "Registered",
   checked_in: "Checked in",
   cancelled: "Cancelled",
 } as const

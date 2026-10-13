@@ -264,10 +264,9 @@ export function Dashboard() {
           }
         />
         <Stat
-          label="Pending review"
-          value={summary.byStatus.pending}
-          detail="Registrations waiting to be confirmed"
-          tone={summary.byStatus.pending > 0 ? "warning" : undefined}
+          label="Checked in"
+          value={summary.byStatus.checked_in}
+          detail="Registrations checked in at the desk"
         />
         <Stat
           label="Need assistance"

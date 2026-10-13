@@ -27,32 +27,76 @@ export const STAY_DATES = ARRIVAL_DATES
 export type StayDate = (typeof STAY_DATES)[number]
 
 /**
- * Mandals guests register under.
+ * Mandals guests register under, grouped as the mandal dropdowns show them.
  *
  * A mandal is the local satsang group a devotee belongs to, usually named after
- * the city or the area. Kept as a flat list for now; it will move to the
- * database once staff need to add new ones themselves.
+ * the city or the area. Kept as a list here for now; it will move to the
+ * database once staff need to add new ones themselves. Mirrors MANDALS on the
+ * server, which has the same mandals ungrouped.
  */
-export const MANDALS = [
-  "Ahmedabad",
-  "Dahegam",
-  "Gandhinagar",
-  "Surat",
-  "Vadodara",
-  "Rajkot",
-  "Bhavnagar",
-  "Anand",
-  "Jamnagar",
-  "Mumbai",
-  "Pune",
-  "Delhi",
-  "London (UK)",
-  "New Jersey (USA)",
-  "Canada",
-  "New Zealand",
-  "Australia",
-  "Dubai (UAE)",
+export const MANDAL_GROUPS = [
+  {
+    label: "Gujarat",
+    mandals: [
+      "Ahmedabad",
+      "Gandhinagar",
+      "Dehgam",
+      "SabarKantha",
+      "Sathamba",
+      "Nadiad",
+      "Khambhat",
+      "Anand",
+      "Vidyanagar",
+      "Mogri",
+      "Baroda",
+      "Vemar",
+      "Ankleshwar",
+      "Surat",
+      "Barasadi",
+      "Morbi",
+      "Dhari",
+      "Bhingrad",
+      "Manavadar",
+      "Rajkot",
+      "Junagadh",
+      "Bhavnagar",
+      "Rajpipla",
+      "Jasdan",
+    ],
+  },
+  {
+    label: "Gujarat regions",
+    mandals: [
+      "South Gujarat",
+      "North Gujarat",
+      "Central Gujarat",
+      "Kutch-Saurashtra",
+      "Charotar Pradesh",
+      "Kanam Pradesh",
+    ],
+  },
+  {
+    label: "Rest of India",
+    mandals: ["Mumbai", "Pune", "Hyderabad", "Chennai", "Kochi", "Delhi"],
+  },
+  {
+    label: "International",
+    mandals: [
+      "UK",
+      "USA",
+      "Canada",
+      "Australia",
+      "New Zealand",
+      "Dubai",
+      "France",
+      "Kenya",
+    ],
+  },
 ] as const
+
+/** Every mandal, in dropdown order. */
+export const MANDALS = MANDAL_GROUPS.flatMap((group) => group.mandals)
+export type Mandal = (typeof MANDALS)[number]
 
 /** For guests who come on their own, outside any mandal. */
 export const NO_MANDAL = "Not in a mandal"
@@ -62,7 +106,7 @@ export const NO_MANDAL = "Not in a mandal"
  * these. Their devotees are not asked how they travel or whether they need a
  * bed — they need neither. Mirrors isLocalMandal on the server.
  */
-const LOCAL_MANDALS: readonly string[] = ["Dahegam", "Gandhinagar"]
+const LOCAL_MANDALS: readonly string[] = ["Dehgam", "Gandhinagar"]
 export const isLocalMandal = (mandal: string) =>
   mandal.startsWith("Ahmedabad") || LOCAL_MANDALS.includes(mandal)
 
@@ -81,14 +125,9 @@ export const TRAIN_STATIONS = [
  * Mandals outside India. Their devotees fly in, so the form offers —
  * optionally — a pickup from and a drop to Ahmedabad airport.
  */
-export const OVERSEAS_MANDALS: readonly string[] = [
-  "London (UK)",
-  "New Jersey (USA)",
-  "Canada",
-  "New Zealand",
-  "Australia",
-  "Dubai (UAE)",
-]
+export const OVERSEAS_MANDALS: readonly string[] = MANDAL_GROUPS.find(
+  (group) => group.label === "International"
+)!.mandals
 
 /** Approximate time of day. Planning works in slots; nobody knows their exact train time a month out. */
 export const TIME_SLOTS = {

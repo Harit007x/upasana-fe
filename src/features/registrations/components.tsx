@@ -16,7 +16,6 @@ import * as React from "react"
 import { Badge } from "@/components/ui/primitives"
 import { EVENT } from "@/config/event"
 import { useT } from "@/i18n/context"
-import { formatMobile } from "@/lib/phone"
 
 import { formatStay } from "./format"
 import { eventDaysCovered } from "./stay"
@@ -30,9 +29,8 @@ import {
 } from "./types"
 
 const STATUS_VARIANT = {
-  pending: "warning",
-  confirmed: "success",
-  checked_in: "secondary",
+  confirmed: "outline",
+  checked_in: "success",
   cancelled: "destructive",
 } as const satisfies Record<RegistrationStatus, string>
 
@@ -156,18 +154,11 @@ export function RegistrationConfirmation({
           <StatusBadge status={registration.status} />
         </dd>
       </dl>
-      <p className="max-w-sm text-2xs/relaxed text-muted-foreground">
-        {t(
-          "The seva team reviews every registration and confirms it on {mobile}.",
-          {
-            mobile: primary?.mobile
-              ? formatMobile(primary.mobile)
-              : t("your mobile number"),
-          }
-        )}
-        {registration.accommodationRequired &&
-          ` ${t("Room details follow once accommodation is allotted.")}`}
-      </p>
+      {registration.accommodationRequired && (
+        <p className="max-w-sm text-2xs/relaxed text-muted-foreground">
+          {t("Room details follow once accommodation is allotted.")}
+        </p>
+      )}
       <div className="flex flex-wrap justify-center gap-2">{actions}</div>
     </div>
   )

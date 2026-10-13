@@ -169,8 +169,7 @@ function EditMyRegistrationPage() {
               </>
             )
           })()}
-          {chosen.status === "confirmed" &&
-            ` ${t("It stays confirmed after you save; the seva team can see what you changed.")}`}
+          {` ${t("The seva team can see what you changed.")}`}
           {/* Paused with per-person allotment:
           {chosen.stay &&
             " Changing dates or people may change your rooms."} */}

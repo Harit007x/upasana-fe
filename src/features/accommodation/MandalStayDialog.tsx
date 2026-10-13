@@ -19,7 +19,7 @@ import {
 } from "@/components/ui/input"
 import { PhoneInput } from "@/components/ui/phone-input"
 import { NativeSelect } from "@/components/ui/select"
-import { MANDALS } from "@/config/event"
+import { MandalSelect } from "@/components/MandalSelect"
 import {
   DEFAULT_COUNTRY_CODE,
   fromE164,
@@ -251,25 +251,16 @@ export function MandalStayDialog({
                 error={errors.mandal}
                 className="sm:col-span-2"
               >
-                <NativeSelect
+                <MandalSelect
                   id="stay-mandal"
                   value={mandal}
-                  aria-invalid={!!errors.mandal}
-                  onChange={(e) => pickMandal(e.target.value)}
-                >
-                  <option value="">Pick a mandal</option>
-                  {MANDALS.map((m) => (
-                    <option
-                      key={m}
-                      value={m}
-                      // The chosen one stays enabled, so it doesn't look blank.
-                      disabled={mandalsHere.has(m) && m !== mandal}
-                    >
-                      {m}
-                      {mandalsHere.has(m) ? " (has rooms here)" : ""}
-                    </option>
-                  ))}
-                </NativeSelect>
+                  onChange={pickMandal}
+                  placeholder="Pick a mandal"
+                  // The chosen one stays enabled, so it doesn't look blank.
+                  isDisabled={(m) => mandalsHere.has(m) && m !== mandal}
+                  note={(m) => (mandalsHere.has(m) ? " (has rooms here)" : "")}
+                  invalid={!!errors.mandal}
+                />
                 {existingHere && !submitted && (
                   <div className="flex flex-wrap items-center gap-2 rounded-md bg-amber-500/10 px-3 py-2 text-2xs/relaxed text-amber-800 dark:text-amber-300">
                     <span>

@@ -161,7 +161,7 @@ export function ListTable({
     <>
       {onOpen && (
         <p className="text-2xs text-muted-foreground">
-          Tap a row to see it, call the contact, or confirm it.
+          Tap a row to see it, call the contact, or check them in.
         </p>
       )}
       {/* Phones: a block per row, the first details as its heading. */}

@@ -12,18 +12,13 @@ import { Link, useSearchParams } from "react-router"
 
 import { PageHeader } from "@/components/layout/AppShell"
 import { LoadError } from "@/components/LoadError"
+import { MandalSelect } from "@/components/MandalSelect"
 import { ShareLink } from "@/components/ShareLink"
 import { Button, buttonVariants } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge, Card, EmptyState, Skeleton } from "@/components/ui/primitives"
 import { NativeSelect } from "@/components/ui/select"
-import {
-  EVENT,
-  MANDALS,
-  NO_MANDAL,
-  formatDay,
-  formatStayDate,
-} from "@/config/event"
+import { EVENT, NO_MANDAL, formatDay, formatStayDate } from "@/config/event"
 import {
   dayTotals,
   formatMeals,
@@ -379,19 +374,14 @@ export function Guests() {
                 ))}
               </NativeSelect>
               {!sanchalak && (
-                <NativeSelect
+                <MandalSelect
                   value={mandal}
-                  onChange={(e) => setParam("mandal", e.target.value)}
+                  onChange={(value) => setParam("mandal", value)}
+                  first={[{ value: "", label: "Every mandal" }]}
+                  last={[{ value: NO_MANDAL, label: NO_MANDAL }]}
                   aria-label="Mandal"
                   className="sm:w-48"
-                >
-                  <option value="">Every mandal</option>
-                  {[...MANDALS, NO_MANDAL].map((m) => (
-                    <option key={m} value={m}>
-                      {m}
-                    </option>
-                  ))}
-                </NativeSelect>
+                />
               )}
             </div>
             <span className="text-2xs text-muted-foreground">

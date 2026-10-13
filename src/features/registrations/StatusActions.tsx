@@ -18,7 +18,7 @@ import {
 } from "./types"
 
 /**
- * Confirm, check in, cancel, restore: the status buttons, shared by a
+ * Check in, cancel, restore: the status buttons, shared by a
  * registration's page and the quick view that opens from a list (Reports,
  * the Assistant). Only for reviewers (staff, admins); the caller checks.
  */
@@ -32,25 +32,16 @@ const ACTIONS: Record<
     variant?: "outline" | "destructive"
   }[]
 > = {
-  pending: [
-    { to: "confirmed", label: "Confirm" },
-    { to: "cancelled", label: "Cancel", variant: "destructive" },
-  ],
   confirmed: [
     { to: "checked_in", label: "Mark checked in" },
-    { to: "pending", label: "Move back to pending", variant: "outline" },
     { to: "cancelled", label: "Cancel", variant: "destructive" },
   ],
   checked_in: [{ to: "confirmed", label: "Undo check-in", variant: "outline" }],
-  cancelled: [{ to: "pending", label: "Restore", variant: "outline" }],
+  cancelled: [{ to: "confirmed", label: "Restore", variant: "outline" }],
 }
 
-/**
- * The step forward from each status — confirming a pending one, checking in
- * a confirmed one. Working through a list, it is offered as "… & next".
- */
+/** The step forward: checking in. Working through a list, it is offered as "… & next". */
 const FORWARD: Partial<Record<RegistrationStatus, RegistrationStatus>> = {
-  pending: "confirmed",
   confirmed: "checked_in",
 }
 

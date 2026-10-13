@@ -11,8 +11,8 @@ import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/choice"
 import { DigitsInput, Field, Input, Textarea } from "@/components/ui/input"
 import { PhoneInput } from "@/components/ui/phone-input"
-import { NativeSelect } from "@/components/ui/select"
-import { MANDALS, NO_MANDAL, formatStayDate } from "@/config/event"
+import { MandalSelect } from "@/components/MandalSelect"
+import { NO_MANDAL, formatStayDate } from "@/config/event"
 
 import {
   GUEST_MEALS,
@@ -383,22 +383,14 @@ export function GuestForm({
           required
           error={errors.hostMandal}
         >
-          <NativeSelect
+          <MandalSelect
             value={values.hostMandal}
-            onChange={(e) => set("hostMandal", e.target.value)}
+            onChange={(value) => set("hostMandal", value)}
+            placeholder="Pick a mandal"
+            last={[{ value: NO_MANDAL, label: NO_MANDAL }]}
             disabled={!!lockedMandal}
-            aria-invalid={!!errors.hostMandal}
-          >
-            <option value="" disabled>
-              Pick a mandal
-            </option>
-            {MANDALS.map((mandal) => (
-              <option key={mandal} value={mandal}>
-                {mandal}
-              </option>
-            ))}
-            <option value={NO_MANDAL}>{NO_MANDAL}</option>
-          </NativeSelect>
+            invalid={!!errors.hostMandal}
+          />
         </Field>
       </section>
 

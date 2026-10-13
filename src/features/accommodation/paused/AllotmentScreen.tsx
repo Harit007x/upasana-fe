@@ -363,7 +363,6 @@ function SendAll({ index, rows }: { index: AccommodationIndex; rows: Row[] }) {
     (row) =>
       row.stay.status === "allotted" &&
       row.stay.problems.length === 0 &&
-      row.registration.status !== "pending" &&
       !index.notices.get(row.registration.id)?.upToDate
   )
 

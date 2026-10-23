@@ -455,6 +455,8 @@ export const GU: Record<string, string> = {
     "મુખ્ય સંપર્કનો મોબાઇલ નંબર જરૂરી છે",
   "Already registered as {code} — one registration per number":
     "{code} તરીકે પહેલેથી નોંધાયેલ છે — એક નંબર પર એક જ નોંધણી",
+  "Already registered — one registration per number":
+    "પહેલેથી નોંધાયેલ છે — એક નંબર પર એક જ નોંધણી",
   "Verify this number with the code we send on WhatsApp":
     "અમે WhatsApp પર મોકલેલા કોડથી આ નંબરની ખાતરી કરો",
   "Verification expired. Send a new code to confirm this number.":

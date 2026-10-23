@@ -15,7 +15,12 @@ import { useT } from "@/i18n/context"
 import { serverMessage } from "@/i18n/translate"
 import { asciiDigits, formatMobile } from "@/lib/phone"
 
-import { useRegistrationLookup, useSendOtp, useVerifyOtp } from "../api"
+import {
+  useNumberTaken,
+  useRegistrationLookup,
+  useSendOtp,
+  useVerifyOtp,
+} from "../api"
 import { DevCodeNote } from "../components"
 import { REGISTRATION_STATUSES, type RegistrationSummary } from "../types"
 import { useFormOptions } from "./form-options"
@@ -37,20 +42,29 @@ import {
  *   `mobileVerificationToken`); editing the number afterwards asks again.
  *
  * Also warns when the number already has a registration, so a family is not
- * booked twice: on the public page once the code proves the number is theirs,
- * at the desk as soon as the number is complete.
+ * booked twice, as soon as the number is complete — before any code is sent.
+ * The desk sees which registration; the public page only that there is one,
+ * until a code proves the number is theirs.
  */
 export function MobileVerification() {
   const { watch, setValue, trigger, getValues } =
     useFormContext<RegistrationFormValues>()
   const { allowInPerson, atDesk, editingId } = useFormOptions()
   const { t } = useT()
-  const [members, keptMobile, verifiedInPerson, verifiedMobile, token] = watch([
+  const [
+    members,
+    keptMobile,
+    verifiedInPerson,
+    verifiedMobile,
+    token,
+    takenMobile,
+  ] = watch([
     "members",
     "keptMobile",
     "verifiedInPerson",
     "verifiedMobile",
     "mobileVerificationToken",
+    "takenMobile",
   ])
 
   const sendOtp = useSendOtp()
@@ -79,20 +93,27 @@ export function MobileVerification() {
   const kept = !!e164 && e164 === keptMobile
   const awaitingCode = !!e164 && sentTo === e164 && !verified
 
-  // The desk may look a number up directly; the public page only learns it
-  // from a verified code.
+  // The desk may look a number up directly. The public page asks only whether
+  // it is taken — which registration, and its name, it learns from a verified
+  // code. A kept number is this registration's own, so there is nothing to ask.
   const lookup = useRegistrationLookup(
     atDesk && e164 ? e164 : undefined,
     editingId
   )
-  // One registration per contact number: the one this number already has.
-  const taken = atDesk
-    ? lookup.data?.[0]
-    : takenFromOtp &&
-        takenFromOtp.mobile === e164 &&
-        takenFromOtp.registration.id !== editingId
+  const numberTaken = useNumberTaken(
+    !atDesk && e164 && !kept ? e164 : undefined
+  )
+  const otpFound =
+    takenFromOtp &&
+    takenFromOtp.mobile === e164 &&
+    takenFromOtp.registration.id !== editingId
       ? takenFromOtp.registration
       : undefined
+  // One registration per contact number: the one this number already has.
+  const taken = atDesk ? lookup.data?.[0] : otpFound
+  // Public page: taken, but whose is not for us to say. Read from the form, so
+  // a submit that lost the race to another registration lands here too.
+  const takenUnnamed = !atDesk && !taken && !!e164 && takenMobile === e164
 
   // Recorded in the form, so the schema blocks Continue on this number. At
   // the desk the lookup is live, so it also clears when the number changes.
@@ -107,6 +128,31 @@ export function MobileVerification() {
       setValue("takenCode", "")
     }
   }, [atDesk, e164, lookup.isSuccess, lookup.data, setValue, getValues])
+
+  // The same for the public page's yes-or-no check, leaving alone what a
+  // verified code found.
+  React.useEffect(() => {
+    if (atDesk || !e164 || !numberTaken.isSuccess) return
+    if (numberTaken.data.taken) {
+      if (getValues("takenMobile") === e164) return
+      setValue("takenMobile", e164)
+      setValue("takenCode", "")
+    } else if (
+      getValues("takenMobile") === e164 &&
+      takenFromOtp?.mobile !== e164
+    ) {
+      setValue("takenMobile", "")
+      setValue("takenCode", "")
+    }
+  }, [
+    atDesk,
+    e164,
+    numberTaken.isSuccess,
+    numberTaken.data,
+    takenFromOtp,
+    setValue,
+    getValues,
+  ])
 
   React.useEffect(() => {
     if (resendIn <= 0) return
@@ -154,7 +200,7 @@ export function MobileVerification() {
   if (!e164) return null
 
   // Taken: nothing to verify — this number cannot register again.
-  if (taken) {
+  if (taken || takenUnnamed) {
     return (
       <AlreadyRegistered
         registration={taken}
@@ -218,10 +264,12 @@ export function MobileVerification() {
                 type="button"
                 size="lg"
                 onClick={send}
-                disabled={sendOtp.isPending}
+                // Until we know the number is free: a code to a taken number
+                // can only end in "already registered".
+                disabled={sendOtp.isPending || numberTaken.isLoading}
                 className="shrink-0"
               >
-                {sendOtp.isPending ? (
+                {sendOtp.isPending || numberTaken.isLoading ? (
                   <RiLoader4Line className="animate-spin" />
                 ) : (
                   <RiWhatsappLine />
@@ -326,6 +374,9 @@ export function MobileVerification() {
  * One registration per contact number: this number already has one, so this
  * form cannot be submitted with it. Points to changing that registration
  * instead — or, at the desk, to using a different family member's number.
+ *
+ * Without `registration` (the public page, before a code), it says only that
+ * the number is taken; the edit page verifies the number and opens it.
  */
 function AlreadyRegistered({
   registration: r,
@@ -333,7 +384,7 @@ function AlreadyRegistered({
   mobile,
   token,
 }: {
-  registration: RegistrationSummary
+  registration?: RegistrationSummary
   atDesk: boolean
   mobile: string
   token?: string
@@ -345,12 +396,14 @@ function AlreadyRegistered({
         <RiErrorWarningLine className="mt-px size-3.5 shrink-0" />
         {t("{mobile} is already registered", { mobile: formatMobile(mobile) })}
       </p>
-      <p className="text-foreground">
-        <span className="font-mono font-medium">{r.code}</span> · {r.name} ·{" "}
-        {r.people === 1 ? t("1 person") : t("{n} people", { n: r.people })} ·{" "}
-        {t(REGISTRATION_STATUSES[r.status])}
-        {atDesk && ` · ${r.mandal}`}
-      </p>
+      {r && (
+        <p className="text-foreground">
+          <span className="font-mono font-medium">{r.code}</span> · {r.name} ·{" "}
+          {r.people === 1 ? t("1 person") : t("{n} people", { n: r.people })} ·{" "}
+          {t(REGISTRATION_STATUSES[r.status])}
+          {atDesk && ` · ${r.mandal}`}
+        </p>
+      )}
       <p className="text-muted-foreground">
         {t("Each contact number has one registration.")}{" "}
         {atDesk
@@ -360,7 +413,7 @@ function AlreadyRegistered({
             )}
       </p>
       {atDesk ? (
-        r.id ? (
+        r?.id ? (
           <Link
             to={`/registrations/${r.id}`}
             className="self-start font-medium text-primary hover:underline"
@@ -368,20 +421,22 @@ function AlreadyRegistered({
             Open {r.code}
           </Link>
         ) : (
-          <p className="text-muted-foreground">
-            It belongs to {r.mandal}; ask an admin to change it.
-          </p>
+          r && (
+            <p className="text-muted-foreground">
+              It belongs to {r.mandal}; ask an admin to change it.
+            </p>
+          )
         )
       ) : (
-        token && (
-          <Link
-            to="/register/edit"
-            state={{ mobile, token }}
-            className="self-start font-medium text-primary hover:underline"
-          >
-            {t("Change my registration")}
-          </Link>
-        )
+        // With a token the edit page opens it straight away; without one it
+        // starts on this number and sends the code.
+        <Link
+          to="/register/edit"
+          state={token ? { mobile, token } : { mobile }}
+          className="self-start font-medium text-primary hover:underline"
+        >
+          {t("Change my registration")}
+        </Link>
       )}
     </div>
   )

@@ -384,11 +384,14 @@ export function makeRegistrationFormSchema(lang: Lang = "en") {
           values.takenMobile &&
           contactMobile(values) === values.takenMobile
         ) {
+          // No code before the number is verified on the public page.
           issue(
             ["members", 0, "mobile"],
-            t("Already registered as {code} — one registration per number", {
-              code: values.takenCode,
-            })
+            values.takenCode
+              ? t("Already registered as {code} — one registration per number", {
+                  code: values.takenCode,
+                })
+              : t("Already registered — one registration per number")
           )
           return
         }

@@ -173,6 +173,21 @@ export function useRegistrationLookup(
   })
 }
 
+/**
+ * Public: whether a number is already some registration's contact. Yes or no
+ * only — the devotee form learns which registration from a verified code.
+ */
+export function useNumberTaken(mobile: string | undefined) {
+  return useQuery({
+    queryKey: ["registrations", "taken", mobile],
+    queryFn: () =>
+      api.get<{ taken: boolean }>(
+        `/registrations/taken?${new URLSearchParams({ mobile: mobile! })}`
+      ),
+    enabled: !!mobile,
+  })
+}
+
 /** A team member editing a registration at the desk. Status is kept; the change is logged. */
 export function useUpdateRegistration(id: string) {
   const queryClient = useQueryClient()

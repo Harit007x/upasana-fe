@@ -28,6 +28,7 @@ import {
   DEFAULT_COUNTRY_CODE,
   asciiDigits,
   formatMobile,
+  fromE164,
   mobileError,
   toE164,
 } from "@/lib/phone"
@@ -59,10 +60,16 @@ export function EditMyRegistration() {
 
 function EditMyRegistrationPage() {
   const { t } = useT()
-  // Arriving from "Edit my registration instead" on the new-registration form,
-  // the number is already verified.
+  // Arriving from "Change my registration" on the new-registration form: with
+  // a token the number is already verified; without one (the form found it
+  // taken before sending a code) it is only filled in.
   const location = useLocation()
-  const fromForm = (location.state as Auth | null) ?? undefined
+  const state = location.state as Partial<Auth> | null
+  const fromForm =
+    state?.mobile && state.token
+      ? { mobile: state.mobile, token: state.token }
+      : undefined
+  const prefill = !fromForm ? state?.mobile : undefined
   const [auth, setAuth] = React.useState<Auth | undefined>(fromForm)
   const [expired, setExpired] = React.useState(false)
   const [saved, setSaved] = React.useState<Registration>()
@@ -96,6 +103,7 @@ function EditMyRegistrationPage() {
   } else if (!auth) {
     body = (
       <VerifyNumber
+        initialMobile={prefill}
         expired={expired}
         onVerified={(next) => {
           setExpired(false)
@@ -210,17 +218,22 @@ function EditMyRegistrationPage() {
 
 /** The contact number, and a WhatsApp code to prove it is theirs. */
 function VerifyNumber({
+  initialMobile,
   expired,
   onVerified,
 }: {
+  initialMobile?: string
   expired: boolean
   onVerified: (auth: Auth) => void
 }) {
   const { t } = useT()
   const sendOtp = useSendOtp()
   const verifyOtp = useVerifyOtp()
-  const [country, setCountry] = React.useState<string>(DEFAULT_COUNTRY_CODE)
-  const [mobile, setMobile] = React.useState("")
+  const initial = initialMobile ? fromE164(initialMobile) : undefined
+  const [country, setCountry] = React.useState<string>(
+    initial?.code ?? DEFAULT_COUNTRY_CODE
+  )
+  const [mobile, setMobile] = React.useState(initial?.national ?? "")
   const [numberError, setNumberError] = React.useState<string>()
   const [sentTo, setSentTo] = React.useState<string>()
   const [code, setCode] = React.useState("")

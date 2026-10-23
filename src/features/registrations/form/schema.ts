@@ -703,11 +703,12 @@ export function contactMobile(values: Pick<RegistrationFormValues, "members">) {
 }
 
 /**
- * TEMPORARY: off until the WhatsApp Business API is set up to send codes. While
- * off, the form asks for no code on the contact number. Turn back on together
- * with MOBILE_OTP_REQUIRED in upasana-be/src/lib/otp.ts.
+ * Whether the contact number needs a WhatsApp code. Off from 2026-10-13 to
+ * 2026-10-23 while WhatsApp was not set up; off, the form asks for no code on
+ * the contact number. Change together with MOBILE_OTP_REQUIRED in
+ * upasana-be/src/lib/otp.ts.
  */
-export const MOBILE_OTP_REQUIRED = false
+export const MOBILE_OTP_REQUIRED = true
 
 /**
  * Whether the contact's number is verified: unchanged from the registration

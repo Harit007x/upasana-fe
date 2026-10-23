@@ -85,7 +85,7 @@ const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
  * two steps: who, then how the link reached
  * them.
  *
- * The server sends the invite by email (Resend) or on WhatsApp (MSG91) when
+ * The server sends the invite by email (Resend) or on WhatsApp (Meta Cloud API) when
  * that channel is set up. The second step always shows the link as well, with
  * WhatsApp and SMS buttons that open on the admin's own phone, so an invite
  * the server could not deliver still gets there.

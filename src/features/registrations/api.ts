@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 
 import { changeKeys } from "@/features/logs/api"
+import { useT } from "@/i18n/context"
 import { ApiError, api } from "@/lib/api"
 
 import type {
@@ -131,9 +132,12 @@ export type OtpSent = {
   devCode?: string
 }
 
+/** The code arrives in the language the page is shown in (English on staff screens). */
 export function useSendOtp() {
+  const { lang } = useT()
   return useMutation({
-    mutationFn: (mobile: string) => api.post<OtpSent>("/otp/send", { mobile }),
+    mutationFn: (mobile: string) =>
+      api.post<OtpSent>("/otp/send", { mobile, lang }),
   })
 }
 

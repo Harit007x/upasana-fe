@@ -9,6 +9,7 @@ import {
   RiLogoutBoxRLine,
   RiMenuLine,
   RiPieChart2Line,
+  RiSendPlaneLine,
   RiShieldUserLine,
   RiSparkling2Line,
   RiWhatsappLine,
@@ -86,6 +87,14 @@ const ADMIN_NAV: NavItem[] = [
     icon: RiCalendarScheduleLine,
   },
   { to: "/admin/logs", label: "Logs", short: "Logs", icon: RiHistoryLine },
+  {
+    to: "/admin/messages",
+    label: "Send messages",
+    short: "Send",
+    icon: RiSendPlaneLine,
+    // Also lit while writing a new message and on a past send.
+    nested: true,
+  },
   {
     to: "/admin/whatsapp",
     label: "WhatsApp",

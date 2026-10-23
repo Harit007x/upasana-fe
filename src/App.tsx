@@ -64,6 +64,7 @@ const Registrations = page(
   "Registrations"
 )
 const Schedule = page(() => import("@/routes/Schedule"), "Schedule")
+const WhatsApp = page(() => import("@/routes/WhatsApp"), "WhatsApp")
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -199,6 +200,14 @@ export function App() {
                 element={
                   <RequireAdmin>
                     <Logs />
+                  </RequireAdmin>
+                }
+              />
+              <Route
+                path="admin/whatsapp"
+                element={
+                  <RequireAdmin>
+                    <WhatsApp />
                   </RequireAdmin>
                 }
               />

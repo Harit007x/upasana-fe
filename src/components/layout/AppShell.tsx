@@ -11,6 +11,7 @@ import {
   RiPieChart2Line,
   RiShieldUserLine,
   RiSparkling2Line,
+  RiWhatsappLine,
 } from "@remixicon/react"
 import { useQueryClient } from "@tanstack/react-query"
 import { cn } from "cn"
@@ -85,6 +86,12 @@ const ADMIN_NAV: NavItem[] = [
     icon: RiCalendarScheduleLine,
   },
   { to: "/admin/logs", label: "Logs", short: "Logs", icon: RiHistoryLine },
+  {
+    to: "/admin/whatsapp",
+    label: "WhatsApp",
+    short: "WhatsApp",
+    icon: RiWhatsappLine,
+  },
   { to: "/admin", label: "Team", short: "Team", icon: RiShieldUserLine },
 ]
 

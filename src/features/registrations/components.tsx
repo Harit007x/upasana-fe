@@ -9,6 +9,7 @@ import {
   RiPlaneLine,
   RiQuestionLine,
   RiRouteLine,
+  RiShuffleLine,
   RiTrainLine,
 } from "@remixicon/react"
 import * as React from "react"
@@ -17,8 +18,8 @@ import { Badge } from "@/components/ui/primitives"
 import { EVENT } from "@/config/event"
 import { useT } from "@/i18n/context"
 
-import { formatStay } from "./format"
-import { eventDaysCovered } from "./stay"
+import { comingByText, formatStay, journeyHomeText } from "./format"
+import { eventDaysCovered, travelOf } from "./stay"
 import {
   REGISTRATION_STATUSES,
   REGISTRATION_TYPES,
@@ -43,6 +44,7 @@ const TRAVEL_ICONS = {
   other: RiRouteLine,
   local: RiHome4Line,
   not_filled: RiQuestionLine,
+  separate: RiShuffleLine,
 } satisfies Record<TravelMode, React.ComponentType>
 
 /** The icon for how someone is travelling: a train for train, and so on. */
@@ -55,6 +57,44 @@ export function TravelModeIcon({
 }) {
   const Icon = TRAVEL_ICONS[mode]
   return <Icon aria-hidden className={className} />
+}
+
+/**
+ * Each person's own travel, for a party that travels separately: their way
+ * here with its details, the pickup and drop they asked for, and the journey
+ * home. Staff screens only, so English.
+ */
+export function PersonTravelList({
+  registration,
+}: {
+  registration: Registration
+}) {
+  return (
+    <ul className="flex flex-col gap-2">
+      {registration.members.map((member) => {
+        const travel = travelOf(registration, member)
+        return (
+          <li key={member.id} className="flex flex-col gap-0.5">
+            <span className="font-medium">{member.fullName}</span>
+            <span className="flex flex-wrap items-center gap-1.5">
+              <TravelModeIcon
+                mode={travel.mode}
+                className="size-3.5 shrink-0 text-muted-foreground"
+              />
+              {comingByText(travel)}
+              {travel.needsPickup && <Badge variant="info">Pickup</Badge>}
+              {travel.needsDrop && <Badge variant="info">Drop</Badge>}
+            </span>
+            {travel.needsDrop && (
+              <span className="text-muted-foreground">
+                Journey home: {journeyHomeText(travel)}
+              </span>
+            )}
+          </li>
+        )
+      })}
+    </ul>
+  )
 }
 
 export function StatusBadge({ status }: { status: RegistrationStatus }) {

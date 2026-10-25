@@ -1,6 +1,6 @@
 import { EVENT, MANDALS, NO_MANDAL } from "@/config/event"
 
-import { isPresentOn, wantsBed } from "./stay"
+import { isPresentOn, travelOf, wantsBed } from "./stay"
 import {
   TRAVEL_MODES,
   type Registration,
@@ -73,12 +73,16 @@ export function summarize(registrations: Registration[]) {
     .filter((row) => row.registrations > 0)
     .sort((a, b) => b.people - a.people)
 
+  // Each person's way here: their own when the party travels separately.
+  const travellers = active.flatMap((r) =>
+    r.members.map((m) => travelOf(r, m))
+  )
   const travel = (Object.keys(TRAVEL_MODES) as TravelMode[])
+    // Counted per person, so nobody is "travelling separately" on their own.
+    .filter((mode) => mode !== "separate")
     .map((mode) => ({
       mode,
-      people: active
-        .filter((r) => r.travel.mode === mode)
-        .reduce((sum, r) => sum + r.members.length, 0),
+      people: travellers.filter((t) => t.mode === mode).length,
     }))
     .sort((a, b) => b.people - a.people)
 
@@ -97,12 +101,8 @@ export function summarize(registrations: Registration[]) {
     needsAccommodation: active
       .flatMap((r) => r.members.filter((m) => wantsBed(r, m)))
       .filter((m) => m.departure.date > m.arrival.date).length,
-    needsPickup: active
-      .filter((r) => r.travel.needsPickup)
-      .reduce((sum, r) => sum + r.members.length, 0),
-    needsDrop: active
-      .filter((r) => r.travel.needsDrop)
-      .reduce((sum, r) => sum + r.members.length, 0),
+    needsPickup: travellers.filter((t) => t.needsPickup).length,
+    needsDrop: travellers.filter((t) => t.needsDrop).length,
     vehicles: active.reduce((sum, r) => sum + (r.travel.vehicleCount ?? 0), 0),
     days,
     mandals,

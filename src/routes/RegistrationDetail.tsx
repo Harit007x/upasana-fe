@@ -23,6 +23,7 @@ import type { AccommodationData } from "@/features/accommodation/types"
 import { useRegistration } from "@/features/registrations/api"
 import { StatusActions } from "@/features/registrations/StatusActions"
 import {
+  PersonTravelList,
   StatusBadge,
   TravelModeIcon,
   TypeBadge,
@@ -397,7 +398,8 @@ export function RegistrationDetail() {
                   {TRAVEL_MODES[r.travel.mode]}
                 </span>
               </Detail>
-              {r.travel.mode === "personal_vehicle" && (
+              {(r.travel.mode === "personal_vehicle" ||
+                !!r.travel.vehicleCount) && (
                 <Detail label={`Vehicles (${r.travel.vehicleCount ?? 1})`}>
                   {r.travel.vehicleNumbers?.length ? (
                     <span className="flex flex-col tabular-nums">
@@ -411,6 +413,12 @@ export function RegistrationDetail() {
                     </span>
                   )}
                 </Detail>
+              )}
+              {/* Travelling separately: each person's way, pickup and drop. */}
+              {r.travel.mode === "separate" && (
+                <div className="col-span-2 text-xs/relaxed">
+                  <PersonTravelList registration={r} />
+                </div>
               )}
               {r.travel.reference && (
                 <Detail label="Details">{r.travel.reference}</Detail>

@@ -1,4 +1,9 @@
-import { formatIndiaFlight, formatStay } from "@/features/registrations/format"
+import {
+  comingByText,
+  formatIndiaFlight,
+  formatStay,
+  journeyHomeText,
+} from "@/features/registrations/format"
 import { wantsBed } from "@/features/registrations/stay"
 import {
   GENDERS,
@@ -6,6 +11,7 @@ import {
   TRAVEL_MODES,
   type IndiaFlight,
   type Member,
+  type PersonTravel,
 } from "@/features/registrations/types"
 import { formatMobile } from "@/lib/phone"
 import { formatTime } from "@/lib/time"
@@ -34,6 +40,18 @@ const airport = (needed: boolean | undefined, flight?: IndiaFlight) =>
   needed
     ? ["Yes", flight && formatIndiaFlight(flight)].filter(Boolean).join(" · ")
     : "No"
+
+/** "Train · 12009 Shatabdi Exp · pickup · drop: Flight · 6E 2132": one person's own travel, or "—". */
+const ownTravel = (t: PersonTravel | undefined) =>
+  t
+    ? [
+        comingByText(t),
+        t.needsPickup && "pickup",
+        t.needsDrop && `drop: ${journeyHomeText(t)}`,
+      ]
+        .filter(Boolean)
+        .join(" · ")
+    : "—"
 
 /** "Male, 34 yrs, Son" — how someone added or removed is described. */
 const describe = (m: Member) =>
@@ -78,6 +96,8 @@ function memberLines(
       yesNo(wantsBed(beds.before, before)),
       yesNo(wantsBed(beds.after, after)),
     ],
+    // Only while the party travels separately; otherwise the party's travel says it.
+    ["Travel", ownTravel(before.travel), ownTravel(after.travel)],
   ]
   return fields
     .filter(([, a, b]) => a !== b)
@@ -106,11 +126,12 @@ export function describeChange(
   const t0 = before.travel
   const t1 = after.travel
   add("Travel", TRAVEL_MODES[t0.mode], TRAVEL_MODES[t1.mode])
-  add(
-    "Vehicles",
-    t0.mode === "personal_vehicle" ? String(t0.vehicleCount ?? 1) : "—",
-    t1.mode === "personal_vehicle" ? String(t1.vehicleCount ?? 1) : "—"
-  )
+  // Someone in a party travelling separately may bring the vehicles.
+  const vehicles = (t: typeof t0) =>
+    t.mode === "personal_vehicle" || t.vehicleCount
+      ? String(t.vehicleCount ?? 1)
+      : "—"
+  add("Vehicles", vehicles(t0), vehicles(t1))
   add(
     "Vehicle numbers",
     orDash(t0.vehicleNumbers?.join(", ")),

@@ -19,7 +19,9 @@ import {
 import { formatIndiaFlight, formatStay } from "../format"
 import {
   fullNameOf,
+  comesByVehicle,
   hasSplitDates,
+  hasSplitTravel,
   indiaTravelOf,
   bedsWanted,
   needsAccommodation,
@@ -27,6 +29,7 @@ import {
   asksYouthConvention,
   vehicleSlots,
   type RegistrationFormValues,
+  type TripValues,
 } from "./schema"
 
 function Row({
@@ -56,6 +59,66 @@ const stayText = (date: string, slot: string, meal: string, lang: Lang) =>
       )
     : "—"
 
+/**
+ * How someone travels, for the party or one person: "Train · 12009 Shatabdi
+ * Exp · Sabarmati · arrives 6:30 am" with Pickup and Drop badges, and the
+ * journey home on its own line when a drop is wanted.
+ */
+function TripSummary({ trip }: { trip: TripValues }) {
+  const { t } = useT()
+  const mode = trip.travelMode as TravelMode
+  if (!mode) return <>—</>
+  const pickup = offersPickup(mode) && trip.needsPickup === "yes"
+  const drop = pickup && trip.needsDrop
+  const arriving = [
+    t(TRAVEL_MODES[mode]),
+    // By train or bus, the details come only with a pickup.
+    mode !== "personal_vehicle" &&
+      (!offersPickup(mode) || pickup) &&
+      trip.travelReference,
+    mode === "train" && pickup && trip.travelStation && t(trip.travelStation),
+    pickup &&
+      trip.travelTime &&
+      t("arrives {time}", { time: formatTime(trip.travelTime) }),
+  ]
+    .filter(Boolean)
+    .join(" · ")
+  // "Train · 12010 Shatabdi Exp · Sabarmati · leaves 6:45 pm": how they leave,
+  // which need not be how they came, and its details.
+  const home =
+    drop && offersPickup(trip.dropMode)
+      ? [
+          t(TRAVEL_MODES[trip.dropMode]),
+          trip.dropReference,
+          trip.dropMode === "train" && t(trip.dropStation),
+          trip.dropTime &&
+            t("leaves {time}", { time: formatTime(trip.dropTime) }),
+        ]
+          .filter(Boolean)
+          .join(" · ")
+      : ""
+  return (
+    <>
+      {arriving}
+      {pickup && (
+        <Badge variant="info" className="ml-2 align-middle">
+          {t("Pickup needed")}
+        </Badge>
+      )}
+      {drop && (
+        <Badge variant="info" className="ml-2 align-middle">
+          {t("Drop needed")}
+        </Badge>
+      )}
+      {home && (
+        <span className="block text-muted-foreground">
+          {t("Journey home")}: {home}
+        </span>
+      )}
+    </>
+  )
+}
+
 /** Step 4: everything on one screen before it is sent. */
 export function ReviewStep({
   onEditStep,
@@ -70,24 +133,15 @@ export function ReviewStep({
   const { t, lang } = useT()
   const values = getValues()
   const beds = bedsWanted(values)
-  const mode = values.travelMode as TravelMode
   const india = indiaTravelOf(values)
-  const pickup = offersPickup(mode) && values.needsPickup === "yes"
-  const drop = pickup && values.needsDrop
-  // "Train · 12010 Shatabdi Exp · Sabarmati · leaves 6:45 pm": how they leave,
-  // which need not be how they came, and its details.
-  const journeyHome =
-    drop && offersPickup(values.dropMode)
-      ? [
-          t(TRAVEL_MODES[values.dropMode]),
-          values.dropReference,
-          values.dropMode === "train" && t(values.dropStation),
-          values.dropTime &&
-            t("leaves {time}", { time: formatTime(values.dropTime) }),
-        ]
-          .filter(Boolean)
-          .join(" · ")
-      : ""
+  const local = isLocalMandal(values.mandal)
+  const splitDates = hasSplitDates(values)
+  const splitTravel = hasSplitTravel(values)
+  const vehicleCount = vehicleSlots(values)
+  const vehicleNumbers = values.vehicleNumbers
+    .slice(0, vehicleCount)
+    .map((number) => (number ?? "").trim().toUpperCase())
+    .filter(Boolean)
 
   const editButton = (step: number) => (
     <button
@@ -186,7 +240,8 @@ export function ReviewStep({
           {editButton(2)}
         </div>
         <dl className="divide-y divide-border">
-          {!hasSplitDates(values) ? (
+          {/* What the whole party shares first, then each person's own. */}
+          {!splitDates && (
             <>
               <Row label={t("Arriving")}>
                 {stayText(
@@ -205,65 +260,72 @@ export function ReviewStep({
                 )}
               </Row>
             </>
-          ) : (
-            values.members.map((member, index) => (
-              <Row key={index} label={fullNameOf(member)}>
-                {stayText(
-                  member.arrivalDate,
-                  member.arrivalSlot,
-                  member.arrivalMeal,
-                  lang
-                )}{" "}
-                →{" "}
-                {stayText(
-                  member.departureDate,
-                  member.departureSlot,
-                  member.departureMeal,
-                  lang
-                )}
-              </Row>
-            ))
           )}
-          {isLocalMandal(values.mandal) ? (
+          {local ? (
             <Row label={t("Travel and stay")}>{t("Local — not needed")}</Row>
           ) : (
-            <>
+            !splitTravel && (
               <Row label={t("Travel")}>
-                {t(TRAVEL_MODES[mode])}
-                {mode === "personal_vehicle" &&
-                  (() => {
-                    const count = vehicleSlots(values)
-                    const numbers = values.vehicleNumbers
-                      .slice(0, count)
-                      .map((number) => (number ?? "").trim().toUpperCase())
-                      .filter(Boolean)
-                    return ` · ${count === 1 ? t("1 vehicle") : t("{n} vehicles", { n: count })}${numbers.length ? ` · ${numbers.join(", ")}` : ""}`
-                  })()}
-                {/* By train or bus, the details come only with a pickup. */}
-                {mode !== "personal_vehicle" &&
-                  (!offersPickup(mode) || pickup) &&
-                  values.travelReference &&
-                  ` · ${values.travelReference}`}
-                {mode === "train" &&
-                  pickup &&
-                  values.travelStation &&
-                  ` · ${t(values.travelStation)}`}
-                {pickup &&
-                  values.travelTime &&
-                  ` · ${t("arrives {time}", { time: formatTime(values.travelTime) })}`}
-                {pickup && (
-                  <Badge variant="info" className="ml-2 align-middle">
-                    {t("Pickup needed")}
-                  </Badge>
-                )}
-                {drop && (
-                  <Badge variant="info" className="ml-2 align-middle">
-                    {t("Drop needed")}
-                  </Badge>
-                )}
+                <TripSummary trip={values} />
               </Row>
-              {journeyHome && (
-                <Row label={t("Journey home")}>{journeyHome}</Row>
+            )
+          )}
+          {(splitDates || splitTravel) &&
+            values.members.map((member, index) => (
+              <Row
+                key={index}
+                label={fullNameOf(member) || t("Person {n}", { n: index + 1 })}
+              >
+                <span className="flex flex-col gap-1">
+                  {splitDates && (
+                    <>
+                      <span>
+                        <span className="text-muted-foreground">
+                          {t("Arriving")}:
+                        </span>{" "}
+                        {stayText(
+                          member.arrivalDate,
+                          member.arrivalSlot,
+                          member.arrivalMeal,
+                          lang
+                        )}
+                      </span>
+                      <span>
+                        <span className="text-muted-foreground">
+                          {t("Leaving")}:
+                        </span>{" "}
+                        {stayText(
+                          member.departureDate,
+                          member.departureSlot,
+                          member.departureMeal,
+                          lang
+                        )}
+                      </span>
+                    </>
+                  )}
+                  {splitTravel && (
+                    <span>
+                      {splitDates && (
+                        <span className="text-muted-foreground">
+                          {t("Travel")}:{" "}
+                        </span>
+                      )}
+                      <TripSummary trip={member} />
+                    </span>
+                  )}
+                </span>
+              </Row>
+            ))}
+          {!local && (
+            <>
+              {comesByVehicle(values) && (
+                <Row label={t("Vehicles")}>
+                  {vehicleCount === 1
+                    ? t("1 vehicle")
+                    : t("{n} vehicles", { n: vehicleCount })}
+                  {vehicleNumbers.length > 0 &&
+                    ` · ${vehicleNumbers.join(", ")}`}
+                </Row>
               )}
               <Row label={t("Accommodation")}>
                 {needsAccommodation(values) ? (

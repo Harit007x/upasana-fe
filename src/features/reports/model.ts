@@ -15,13 +15,18 @@ import {
   formatIndiaFlight,
   formatMeal,
 } from "@/features/registrations/format"
-import { isPresentOn, wantsBed } from "@/features/registrations/stay"
+import {
+  isPresentOn,
+  travelOf,
+  wantsBed,
+} from "@/features/registrations/stay"
 import {
   GENDERS,
   REGISTRATION_STATUSES,
   REGISTRATION_TYPES,
   TRAVEL_MODES,
   type Member,
+  type PersonTravel,
   type Registration,
   type RegistrationStatus,
   type TravelMode,
@@ -37,12 +42,18 @@ import type { ReportExport } from "./export"
  * 30th", "which NRIs need an airport pickup".
  *
  * Everything works on one row per person (a member of a registration), since
- * dates, meals and beds are per person; travel and the airport pickup belong
- * to the registration and so apply to everyone in it. The whole report lives
+ * dates, meals and beds are per person; so is travel (the party's, or each
+ * person's own when they travel separately — `tripOf`), while the vehicles and
+ * the airport pickup belong to the registration and apply to everyone in it. The whole report lives
  * in the URL, so a report can be bookmarked or sent to another admin.
  */
 
 export type Person = { registration: Registration; member: Member }
+
+/** Ways one person travels: every mode but "separate", which only a party has. */
+const PERSON_MODES = Object.entries(TRAVEL_MODES).filter(
+  ([mode]) => mode !== "separate"
+)
 
 /* ------------------------------------------------------------------ */
 /* Meals                                                               */
@@ -170,8 +181,15 @@ export function partySizeLabel({ min, max }: Range) {
  * How they leave Ahmedabad: the journey home they gave with a drop, else the
  * way they came.
  */
-export const leavingBy = (r: Registration): TravelMode =>
-  r.travel.departureMode ?? r.travel.mode
+export const leavingBy = (travel: PersonTravel): TravelMode =>
+  travel.departureMode ?? travel.mode
+
+/**
+ * How this person travels: their own way when the party travels separately,
+ * else the party's. The vehicles are only on the registration's travel.
+ */
+const tripOf = ({ registration, member }: Person) =>
+  travelOf(registration, member)
 
 /** Sleeps here the night of `day`: wants a bed, is here that day and still here the next morning. */
 export const staysNight = ({ registration, member }: Person, day: string) =>
@@ -407,36 +425,36 @@ export const FILTERS: FilterDef[] = [
     key: "travel",
     label: "Coming by",
     group: "travel",
-    options: Object.entries(TRAVEL_MODES),
-    test: ({ registration }, v) => registration.travel.mode === v,
+    options: PERSON_MODES,
+    test: (p, v) => tripOf(p).mode === v,
   },
   {
     key: "station",
     label: "Train station",
     group: "travel",
     options: TRAIN_STATIONS.map((s) => [s, s]),
-    test: ({ registration }, v) => registration.travel.station === v,
+    test: (p, v) => tripOf(p).station === v,
   },
   {
     key: "pickup",
     label: "Station / bus pickup",
     group: "travel",
     options: YES_NO,
-    test: ({ registration }, v) => flag(registration.travel.needsPickup, v),
+    test: (p, v) => flag(tripOf(p).needsPickup, v),
   },
   {
     key: "leaveBy",
     label: "Leaving by",
     group: "travel",
-    options: Object.entries(TRAVEL_MODES),
-    test: ({ registration }, v) => leavingBy(registration) === v,
+    options: PERSON_MODES,
+    test: (p, v) => leavingBy(tripOf(p)) === v,
   },
   {
     key: "drop",
     label: "Drop when leaving",
     group: "travel",
     options: YES_NO,
-    test: ({ registration }, v) => flag(!!registration.travel.needsDrop, v),
+    test: (p, v) => flag(!!tripOf(p).needsDrop, v),
   },
   {
     key: "airport",
@@ -552,19 +570,19 @@ export const DIMENSIONS = {
   },
   travel: {
     label: "Coming by",
-    of: (p) => ({ label: TRAVEL_MODES[p.registration.travel.mode] }),
+    of: (p) => ({ label: TRAVEL_MODES[tripOf(p).mode] }),
   },
   station: {
     label: "Train station",
-    of: (p) => ({ label: p.registration.travel.station ?? "No station" }),
+    of: (p) => ({ label: tripOf(p).station ?? "No station" }),
   },
   pickup: {
     label: "Station / bus pickup",
-    of: (p) => ({ label: p.registration.travel.needsPickup ? "Yes" : "No" }),
+    of: (p) => ({ label: tripOf(p).needsPickup ? "Yes" : "No" }),
   },
   leaveBy: {
     label: "Leaving by",
-    of: (p) => ({ label: TRAVEL_MODES[leavingBy(p.registration)] }),
+    of: (p) => ({ label: TRAVEL_MODES[leavingBy(tripOf(p))] }),
   },
   flightDay: {
     label: "Landing on (NRI)",
@@ -750,26 +768,26 @@ export const COLUMNS = {
   },
   travel: {
     label: "Coming by",
-    value: (p) => TRAVEL_MODES[p.registration.travel.mode],
+    value: (p) => TRAVEL_MODES[tripOf(p).mode],
   },
   reference: {
     label: "Train / bus",
-    value: (p) => p.registration.travel.reference ?? "",
+    value: (p) => tripOf(p).reference ?? "",
   },
   station: {
     label: "Station",
-    value: (p) => p.registration.travel.station ?? "",
+    value: (p) => tripOf(p).station ?? "",
   },
   arrivalTime: {
     label: "Reaches at",
-    value: (p) =>
-      p.registration.travel.arrivalTime
-        ? formatTime(p.registration.travel.arrivalTime)
-        : "",
+    value: (p) => {
+      const { arrivalTime } = tripOf(p)
+      return arrivalTime ? formatTime(arrivalTime) : ""
+    },
   },
   pickup: {
     label: "Pickup",
-    value: (p) => (p.registration.travel.needsPickup ? "Yes" : ""),
+    value: (p) => (tripOf(p).needsPickup ? "Yes" : ""),
   },
   vehicles: {
     label: "Vehicles",
@@ -781,23 +799,24 @@ export const COLUMNS = {
   },
   leaveBy: {
     label: "Leaving by",
-    value: (p) => TRAVEL_MODES[leavingBy(p.registration)],
+    value: (p) => TRAVEL_MODES[leavingBy(tripOf(p))],
   },
   drop: {
     label: "Drop",
-    value: (p) => (p.registration.travel.needsDrop ? "Yes" : ""),
+    value: (p) => (tripOf(p).needsDrop ? "Yes" : ""),
   },
   journeyHome: {
     label: "Journey home",
-    value: (p) =>
-      [
-        p.registration.travel.departureReference,
-        p.registration.travel.departureStation,
-        p.registration.travel.departureTime &&
-          formatTime(p.registration.travel.departureTime),
+    value: (p) => {
+      const trip = tripOf(p)
+      return [
+        trip.departureReference,
+        trip.departureStation,
+        trip.departureTime && formatTime(trip.departureTime),
       ]
         .filter(Boolean)
-        .join(" · "),
+        .join(" · ")
+    },
   },
   airportPickup: {
     label: "Airport pickup",

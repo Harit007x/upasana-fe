@@ -23,6 +23,7 @@ import {
   GENDERS,
   REGISTRATION_STATUSES,
   TRAVEL_MODES,
+  type PersonTravel,
   type Registration,
 } from "@/features/registrations/types"
 import {
@@ -208,7 +209,7 @@ const filterSchema = Object.fromEntries(
 
 const devoteeReport: ToolDefinition = {
   name: "devotee_report",
-  description: `Counts and lists registered devotees with any mix of filters — the Reports screen's engine. Works on one row per person (a member of a registration); dates, meals and beds are per person, travel and pickups belong to the registration. Returns the totals, a breakdown, and the first ${MODEL_ROWS} rows of the list. The admin sees a card with the full list, Excel and PDF buttons, and a link to the same report on the Reports screen.
+  description: `Counts and lists registered devotees with any mix of filters — the Reports screen's engine. Works on one row per person (a member of a registration); dates, meals and beds are per person, and so are travel and pickups (a party travelling separately has each person's own; otherwise everyone's is the registration's). Returns the totals, a breakdown, and the first ${MODEL_ROWS} rows of the list. The admin sees a card with the full list, Excel and PDF buttons, and a link to the same report on the Reports screen.
 
 Use it for every "who / how many" question about devotees: arrivals and departures on a day, travel by train or bus and the pickups and drops they need, NRI airport pickups, meals on a day, beds needed on a night, ages and children, family sizes, mandals, assistance, the Youth Convention, pending registrations.
 
@@ -557,6 +558,30 @@ export function searchRegistrations(
 
 const pointText = (point: Registration["arrival"]) => formatStay(point)
 
+/** One way of travelling, for the lookup: the party's, or a person's own. */
+function tripDetail(t: PersonTravel) {
+  return {
+    by: TRAVEL_MODES[t.mode],
+    ...(t.reference ? { reference: t.reference } : {}),
+    ...(t.station ? { station: t.station } : {}),
+    ...(t.arrivalTime ? { reaches_at: formatTime(t.arrivalTime) } : {}),
+    pickup: t.needsPickup,
+    ...(t.needsDrop
+      ? {
+          drop: true,
+          leaving_by: TRAVEL_MODES[t.departureMode ?? t.mode],
+          journey_home: [
+            t.departureReference,
+            t.departureStation,
+            t.departureTime && formatTime(t.departureTime),
+          ]
+            .filter(Boolean)
+            .join(" · "),
+        }
+      : {}),
+  }
+}
+
 function registrationDetail(r: Registration) {
   const t = r.travel
   return {
@@ -580,26 +605,11 @@ function registrationDetail(r: Registration) {
       ...(m.attendsYouthConvention != null
         ? { youth_convention: m.attendsYouthConvention }
         : {}),
+      // Travelling separately: this person's own way here and home.
+      ...(m.travel ? { travel: tripDetail(m.travel) } : {}),
     })),
     travel: {
-      by: TRAVEL_MODES[t.mode],
-      ...(t.reference ? { reference: t.reference } : {}),
-      ...(t.station ? { station: t.station } : {}),
-      ...(t.arrivalTime ? { reaches_at: formatTime(t.arrivalTime) } : {}),
-      pickup: t.needsPickup,
-      ...(t.needsDrop
-        ? {
-            drop: true,
-            leaving_by: TRAVEL_MODES[t.departureMode ?? t.mode],
-            journey_home: [
-              t.departureReference,
-              t.departureStation,
-              t.departureTime && formatTime(t.departureTime),
-            ]
-              .filter(Boolean)
-              .join(" · "),
-          }
-        : {}),
+      ...tripDetail(t),
       ...(t.vehicleCount
         ? {
             vehicles: [t.vehicleCount, ...(t.vehicleNumbers ?? [])].join(" · "),

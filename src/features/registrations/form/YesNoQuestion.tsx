@@ -19,6 +19,7 @@ export function YesNoQuestion({
 }: {
   name:
     | "needsPickup"
+    | `members.${number}.needsPickup`
     | "arrivalMeal"
     | "departureMeal"
     | `members.${number}.arrivalMeal`

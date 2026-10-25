@@ -6,7 +6,7 @@ import {
   RiHotelBedLine,
 } from "@remixicon/react"
 import { cn } from "cn"
-import { Controller, useFormContext } from "react-hook-form"
+import { Controller, get, useFormContext } from "react-hook-form"
 
 import { Button } from "@/components/ui/button"
 import { Checkbox, ChoiceGroup } from "@/components/ui/choice"
@@ -31,15 +31,22 @@ import { TravelModeIcon } from "../components"
 import { compareStay, isPresentOn, nightsBetween } from "../stay"
 import { TRAVEL_MODES, type TravelMode } from "../types"
 import {
+  asksVehicleCount,
+  comesByVehicle,
   fullNameOf,
   hasSplitDates,
+  hasSplitTravel,
   isSameDayFor,
   isSameDayVisit,
   maxVehicles,
   offersPickup,
+  vehicleTravellers,
   DROP_MODES,
+  EMPTY_TRIP,
   TRAVEL_CHOICES,
+  TRIP_FIELDS,
   type DropMode,
+  type TripValues,
   vehicleSlots,
   type RegistrationFormValues,
 } from "./schema"
@@ -86,6 +93,13 @@ function MealQuestion({
 }
 
 /**
+ * Where a set of travel fields lives: the party's at the top level, or one
+ * person's when the party travels separately. The field names after it are
+ * the same either way (TripValues).
+ */
+type TripPrefix = "" | `members.${number}.`
+
+/**
  * The train, bus or flight into Ahmedabad (for a pickup) or out of it (for
  * a drop): the train's number, name and station, the bus's operator and
  * stop, or the flight number; and the time. All required once the pickup or drop is wanted.
@@ -93,9 +107,11 @@ function MealQuestion({
 function Journey({
   mode,
   leg,
+  prefix,
 }: {
   mode: DropMode
   leg: "arrival" | "departure"
+  prefix: TripPrefix
 }) {
   const {
     control,
@@ -106,19 +122,22 @@ function Journey({
   const arriving = leg === "arrival"
   const names = arriving
     ? ({
-        reference: "travelReference",
-        station: "travelStation",
-        time: "travelTime",
+        reference: `${prefix}travelReference`,
+        station: `${prefix}travelStation`,
+        time: `${prefix}travelTime`,
       } as const)
     : ({
-        reference: "dropReference",
-        station: "dropStation",
-        time: "dropTime",
+        reference: `${prefix}dropReference`,
+        station: `${prefix}dropStation`,
+        time: `${prefix}dropTime`,
       } as const)
   const timeLabel = arriving ? t("Arrival time") : t("Departure time")
-  const referenceError = errors[names.reference]?.message
-  const stationError = errors[names.station]?.message
-  const timeError = errors[names.time]?.message
+  const referenceError: string | undefined = get(
+    errors,
+    names.reference
+  )?.message
+  const stationError: string | undefined = get(errors, names.station)?.message
+  const timeError: string | undefined = get(errors, names.time)?.message
 
   const time = (
     <Field label={timeLabel} required error={timeError}>
@@ -216,6 +235,172 @@ function Journey({
 }
 
 /**
+ * How someone travels: the mode, then for a train, bus or flight the pickup
+ * and drop with their journeys, for "other" a line of details. For the party
+ * (`who` unset, worded "you"), or for one person when the party travels
+ * separately (`who` is their name, and the modes are shown smaller).
+ */
+function TripQuestions({
+  prefix,
+  who,
+  alone,
+}: {
+  prefix: TripPrefix
+  who?: string
+  alone: boolean
+}) {
+  const { control, register, watch } = useFormContext<RegistrationFormValues>()
+  const { t } = useT()
+  const travelMode = watch(`${prefix}travelMode`)
+  // Train and public bus: a required Yes or No, asked before anything else
+  // about the journey; the details follow only a Yes.
+  const wantsPickup = watch(`${prefix}needsPickup`) === "yes"
+  const wantsDrop = wantsPickup && watch(`${prefix}needsDrop`)
+  const dropMode = watch(`${prefix}dropMode`)
+
+  return (
+    <div className="flex flex-col gap-4">
+      <Controller
+        control={control}
+        name={`${prefix}travelMode`}
+        render={({ field, fieldState }) => (
+          <Field
+            label={
+              who
+                ? t("How is {name} travelling?", { name: who })
+                : t("How are you travelling?")
+            }
+            required
+            error={fieldState.error?.message}
+          >
+            <ChoiceGroup
+              name={field.name}
+              value={field.value as TravelMode | ""}
+              onChange={field.onChange}
+              invalid={!!fieldState.error}
+              className={
+                who
+                  ? "grid-cols-2 sm:grid-cols-3"
+                  : "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3"
+              }
+              options={TRAVEL_CHOICES.map((mode) => ({
+                value: mode,
+                label: t(TRAVEL_MODES[mode]),
+                // One person among several: the names alone, so a party of
+                // five is not thirty cards of explanation.
+                description: who ? undefined : t(TRAVEL_DESCRIPTIONS[mode]),
+                icon: <TravelModeIcon mode={mode} />,
+              }))}
+            />
+          </Field>
+        )}
+      />
+
+      {offersPickup(travelMode) && (
+        <div className="flex flex-col gap-4">
+          <YesNoQuestion
+            name={`${prefix}needsPickup`}
+            required
+            question={
+              who
+                ? t("Does {name} need a pickup in Ahmedabad?", { name: who })
+                : t("Do you need a pickup in Ahmedabad?")
+            }
+            description={
+              alone
+                ? t("If yes, the transport team will contact you a day before.")
+                : t(
+                    "If yes, the transport team will contact the primary contact a day before."
+                  )
+            }
+          />
+          {/* What the transport team needs for the pickup, asked only once it is wanted. */}
+          {wantsPickup && (
+            <Journey mode={travelMode} leg="arrival" prefix={prefix} />
+          )}
+          {/* A drop is offered only to those who are also picked up. */}
+          {wantsPickup && (
+            <>
+              <Checkbox
+                id={`${prefix}needsDrop`}
+                label={
+                  who
+                    ? t("{name} needs a drop when leaving", { name: who })
+                    : alone
+                      ? t("I need a drop when leaving")
+                      : t("We need a drop when leaving")
+                }
+                description={t(
+                  "To the station, bus stand or airport, in time for your journey home."
+                )}
+                {...register(`${prefix}needsDrop`)}
+              />
+              {/* Leaving may not be the way they came: asked, then its details. */}
+              {wantsDrop && (
+                <Controller
+                  control={control}
+                  name={`${prefix}dropMode`}
+                  render={({ field, fieldState }) => (
+                    <Field
+                      label={
+                        who
+                          ? t("How is {name} leaving?", { name: who })
+                          : t("How are you leaving?")
+                      }
+                      required
+                      error={fieldState.error?.message}
+                    >
+                      <ChoiceGroup
+                        name={field.name}
+                        value={field.value as DropMode | ""}
+                        onChange={field.onChange}
+                        invalid={!!fieldState.error}
+                        className={
+                          who
+                            ? "grid-cols-2 sm:grid-cols-3"
+                            : "grid-cols-1 sm:grid-cols-3"
+                        }
+                        options={DROP_MODES.map((mode) => ({
+                          value: mode,
+                          label: t(TRAVEL_MODES[mode]),
+                          description: who
+                            ? undefined
+                            : t(DROP_DESCRIPTIONS[mode]),
+                          icon: <TravelModeIcon mode={mode} />,
+                        }))}
+                      />
+                    </Field>
+                  )}
+                />
+              )}
+              {wantsDrop && offersPickup(dropMode) && (
+                <Journey mode={dropMode} leg="departure" prefix={prefix} />
+              )}
+            </>
+          )}
+        </div>
+      )}
+
+      {travelMode === "other" && (
+        <Field label={t("Details (optional)")}>
+          <Input
+            id={`${prefix}travelReference`}
+            placeholder={t("How are you travelling?")}
+            {...register(`${prefix}travelReference`)}
+          />
+        </Field>
+      )}
+
+      {travelMode === "mandal_bus" && (
+        <p className="rounded-md bg-muted px-3 py-2 text-xs/relaxed text-muted-foreground">
+          {t("Your mandal coordinator shares the bus timing and pickup point.")}
+        </p>
+      )}
+    </div>
+  )
+}
+
+/**
  * A date select and a time-slot select, side by side, and below them the
  * meal question when the slot has a meal.
  */
@@ -288,7 +473,6 @@ function StayPicker({
 /** Step 3: when the party comes and goes, and how they get here. */
 export function StayTravelStep() {
   const {
-    control,
     register,
     watch,
     getValues,
@@ -299,40 +483,29 @@ export function StayTravelStep() {
 
   const members = watch("members")
   const sameSchedule = watch("sameSchedule")
-  const travelMode = watch("travelMode")
-  const [registrationType, vehicleCount] = watch(["type", "vehicleCount"])
+  const [registrationType, vehicleCount, sameTravel, travelMode] = watch([
+    "type",
+    "vehicleCount",
+    "sameTravel",
+    "travelMode",
+  ])
   // Someone registering alone speaks for themselves: "I need", not "We need".
   const alone = registrationType === "individual"
-  // Train and public bus: a required Yes or No, asked before anything else
-  // about the journey; the details follow only a Yes.
-  const wantsPickup = watch("needsPickup") === "yes"
-  const wantsDrop = wantsPickup && watch("needsDrop")
-  const dropMode = watch("dropMode")
-  const pickupQuestion = (
-    <YesNoQuestion
-      name="needsPickup"
-      required
-      question={t("Do you need a pickup in Ahmedabad?")}
-      description={
-        alone
-          ? t("If yes, the transport team will contact you a day before.")
-          : t(
-              "If yes, the transport team will contact the primary contact a day before."
-            )
-      }
-    />
-  )
   // A nearby mandal: travel and stay are not asked (see isLocalMandal).
   const mandal = watch("mandal")
   const local = isLocalMandal(mandal)
-  const vehicles = vehicleSlots({
+  const travelValues = {
     type: registrationType,
-    vehicleCount,
     members,
-  })
-  // No more vehicles than people, at most four: an individual is never asked.
-  const vehicleLimit = maxVehicles({ type: registrationType, members })
-  const asksVehicleCount = registrationType === "family"
+    mandal,
+    sameTravel,
+    travelMode,
+  }
+  const splitTravel = hasSplitTravel(travelValues)
+  const vehicles = vehicleSlots({ ...travelValues, vehicleCount })
+  // No more vehicles than the people in them, at most four: only asked when
+  // more than one is possible.
+  const vehicleLimit = maxVehicles(travelValues)
 
   const vehicleNumberInput = (index: number, label?: string) => (
     <Input
@@ -353,9 +526,8 @@ export function StayTravelStep() {
    */
   const onVehicleCountChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const wanted = vehicleSlots({
-      type: getValues("type"),
+      ...getValues(),
       vehicleCount: event.target.value,
-      members: getValues("members"),
     })
     const numbers = getValues("vehicleNumbers")
     if (numbers.length < wanted) {
@@ -486,6 +658,113 @@ export function StayTravelStep() {
   }
   const hasStay = (member: (typeof members)[number] | undefined) =>
     !!member && STAY_FIELDS.some((field) => member[field])
+
+  /** Puts one set of travel answers in place: the party's, or a person's. */
+  const setTrip = (prefix: TripPrefix, trip: TripValues) => {
+    for (const field of TRIP_FIELDS) {
+      setValue(`${prefix}${field}`, trip[field], { shouldDirty: true })
+    }
+  }
+  const tripOf = (values: TripValues): TripValues =>
+    Object.fromEntries(
+      TRIP_FIELDS.map((field) => [field, values[field]])
+    ) as TripValues
+
+  /**
+   * As with the dates: unticking "everyone travels together" starts every
+   * person on the party's answers, so only those who come another way need
+   * changing; ticking it again starts the party's from the first person's, so
+   * nothing typed is lost.
+   */
+  const onSameTravelChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    if (event.target.checked) {
+      const first = getValues("members.0")
+      if (!getValues("travelMode") && first) setTrip("", tripOf(first))
+      return
+    }
+    const party = tripOf(getValues())
+    getValues("members").forEach((member, index) => {
+      if (!member.travelMode) setTrip(`members.${index}.`, party)
+    })
+  }
+
+  /** "Same as above" for travel: the person above came the same way, on the same train. */
+  const copyTripFromAbove = (index: number) =>
+    setTrip(`members.${index}.`, tripOf(getValues(`members.${index - 1}`)))
+  const clearTrip = (index: number) => setTrip(`members.${index}.`, EMPTY_TRIP)
+
+  /**
+   * The party's vehicles: how many, and their numbers. Shown under the travel
+   * questions when everyone travels together, and otherwise inside the card of
+   * the first person who picked a personal vehicle — next to the choice that
+   * asked for it, not below everyone's cards.
+   */
+  const firstDriver = splitTravel
+    ? members.findIndex((m) => m.travelMode === "personal_vehicle")
+    : -1
+  const vehicleQuestions = comesByVehicle(travelValues) && (
+    <div className="flex flex-col gap-4">
+      {/* One person, one vehicle: the count is asked only when more are possible. */}
+      {asksVehicleCount(travelValues) && (
+        <Field
+          label={t("Number of vehicles")}
+          hint={t("Up to {max} for {people} people.", {
+            max: vehicleLimit,
+            people: vehicleTravellers(travelValues),
+          })}
+          error={errors.vehicleCount?.message}
+          className="sm:max-w-48"
+        >
+          <DigitsInput
+            id="vehicleCount"
+            maxLength={1}
+            aria-invalid={!!errors.vehicleCount}
+            {...register("vehicleCount", {
+              onChange: onVehicleCountChange,
+            })}
+          />
+        </Field>
+      )}
+
+      <div className="flex flex-col gap-3">
+        <div className="flex flex-col gap-0.5">
+          <span className="text-xs/relaxed font-medium">
+            {vehicles === 1
+              ? t("Vehicle number (optional)")
+              : t("Vehicle numbers (optional)")}
+          </span>
+          <span className="text-2xs/relaxed text-muted-foreground">
+            {t(
+              "For the parking passes. Leave blank if you do not know them yet."
+            )}
+          </span>
+        </div>
+        {vehicles === 1 ? (
+          // One vehicle: the heading above already names the box.
+          <div className="flex flex-col gap-1.5 sm:max-w-sm">
+            {vehicleNumberInput(0, t("Vehicle number"))}
+            {errors.vehicleNumbers?.[0] && (
+              <p className="text-2xs/relaxed text-destructive">
+                {errors.vehicleNumbers[0].message}
+              </p>
+            )}
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            {Array.from({ length: vehicles }, (_, index) => (
+              <Field
+                key={index}
+                label={t("Vehicle {n}", { n: index + 1 })}
+                error={errors.vehicleNumbers?.[index]?.message}
+              >
+                {vehicleNumberInput(index)}
+              </Field>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  )
 
   return (
     <div className="flex flex-col gap-6">
@@ -623,282 +902,192 @@ export function StayTravelStep() {
         <>
           <section className="flex flex-col gap-4">
             <h3 className="font-heading text-sm font-medium">{t("Travel")}</h3>
-            <Controller
-              control={control}
-              name="travelMode"
-              render={({ field, fieldState }) => (
-                <Field
-                  label={t("How are you travelling?")}
-                  required
-                  error={fieldState.error?.message}
-                >
-                  <ChoiceGroup
-                    name={field.name}
-                    value={field.value as TravelMode | ""}
-                    onChange={field.onChange}
-                    invalid={!!fieldState.error}
-                    className="grid-cols-1 sm:grid-cols-2 lg:grid-cols-3"
-                    options={TRAVEL_CHOICES.map((mode) => ({
-                      value: mode,
-                      label: t(TRAVEL_MODES[mode]),
-                      description: t(TRAVEL_DESCRIPTIONS[mode]),
-                      icon: <TravelModeIcon mode={mode} />,
-                    }))}
-                  />
-                </Field>
-              )}
-            />
 
-            {travelMode === "personal_vehicle" && (
-              <div className="flex flex-col gap-4">
-                {/* One person, one vehicle: only a family is asked how many. */}
-                {asksVehicleCount && (
-                  <Field
-                    label={t("Number of vehicles")}
-                    hint={t("Up to {max} for {people} people.", {
-                      max: vehicleLimit,
-                      people: members.length,
-                    })}
-                    error={errors.vehicleCount?.message}
-                    className="sm:max-w-48"
-                  >
-                    <DigitsInput
-                      id="vehicleCount"
-                      maxLength={1}
-                      aria-invalid={!!errors.vehicleCount}
-                      {...register("vehicleCount", {
-                        onChange: onVehicleCountChange,
-                      })}
-                    />
-                  </Field>
+            {/* Above the questions, so ticking it swaps what is below rather than moving itself. */}
+            {members.length > 1 && (
+              <Checkbox
+                id="sameTravel"
+                label={t("Everyone travels together")}
+                description={t(
+                  "Untick if some of you come a different way — for example, some by train and some by flight."
                 )}
-
-                <div className="flex flex-col gap-3">
-                  <div className="flex flex-col gap-0.5">
-                    <span className="text-xs/relaxed font-medium">
-                      {vehicles === 1
-                        ? t("Vehicle number (optional)")
-                        : t("Vehicle numbers (optional)")}
-                    </span>
-                    <span className="text-2xs/relaxed text-muted-foreground">
-                      {t(
-                        "For the parking passes. Leave blank if you do not know them yet."
-                      )}
-                    </span>
-                  </div>
-                  {vehicles === 1 ? (
-                    // One vehicle: the heading above already names the box.
-                    <div className="flex flex-col gap-1.5 sm:max-w-sm">
-                      {vehicleNumberInput(0, t("Vehicle number"))}
-                      {errors.vehicleNumbers?.[0] && (
-                        <p className="text-2xs/relaxed text-destructive">
-                          {errors.vehicleNumbers[0].message}
-                        </p>
-                      )}
-                    </div>
-                  ) : (
-                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                      {Array.from({ length: vehicles }, (_, index) => (
-                        <Field
-                          key={index}
-                          label={t("Vehicle {n}", { n: index + 1 })}
-                          error={errors.vehicleNumbers?.[index]?.message}
-                        >
-                          {vehicleNumberInput(index)}
-                        </Field>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </div>
+                {...register("sameTravel", { onChange: onSameTravelChange })}
+              />
             )}
 
-            {offersPickup(travelMode) && (
-              <div className="flex flex-col gap-4">
-                {pickupQuestion}
-                {/* What the transport team needs for the pickup, asked only once it is wanted. */}
-                {wantsPickup && <Journey mode={travelMode} leg="arrival" />}
-                {/* A drop is offered only to those who are also picked up. */}
-                {wantsPickup && (
-                  <>
-                    <Checkbox
-                      id="needsDrop"
-                      label={
-                        alone
-                          ? t("I need a drop when leaving")
-                          : t("We need a drop when leaving")
-                      }
-                      description={t(
-                        "To the station, bus stand or airport, in time for your journey home."
-                      )}
-                      {...register("needsDrop")}
-                    />
-                    {/* Leaving may not be the way they came: asked, then its details. */}
-                    {wantsDrop && (
-                      <Controller
-                        control={control}
-                        name="dropMode"
-                        render={({ field, fieldState }) => (
-                          <Field
-                            label={t("How are you leaving?")}
-                            required
-                            error={fieldState.error?.message}
+            {!splitTravel ? (
+              <>
+                <TripQuestions prefix="" alone={alone} />
+                {vehicleQuestions}
+              </>
+            ) : (
+              <div className="flex flex-col gap-4 rounded-lg border border-border p-4">
+                {members.map((member, index) => {
+                  const name =
+                    fullNameOf(member) || t("Person {n}", { n: index + 1 })
+                  const above = index > 0 ? members[index - 1] : undefined
+                  const filled = !!member.travelMode
+                  return (
+                    <div
+                      key={index}
+                      className="group/person flex flex-col gap-3 border-b border-border pb-4 last:border-b-0 last:pb-0"
+                    >
+                      <div className="flex min-h-6 items-center justify-between gap-2">
+                        <p className="text-xs/relaxed font-medium">{name}</p>
+                        {/* As for the dates: "Clear" once this person has
+                            picked a way; otherwise "Same as above", once the
+                            person above has one to copy. */}
+                        {index > 0 && (filled || !!above?.travelMode) && (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() =>
+                              filled
+                                ? clearTrip(index)
+                                : copyTripFromAbove(index)
+                            }
+                            title={
+                              filled
+                                ? t("Clear {name}'s travel", { name })
+                                : t("Copy {name}'s travel", {
+                                    name:
+                                      (above && fullNameOf(above)) ||
+                                      t("person {n}", { n: index }),
+                                  })
+                            }
+                            className="text-muted-foreground opacity-0 transition-opacity group-hover/person:opacity-100 focus-visible:opacity-100 pointer-coarse:opacity-100"
                           >
-                            <ChoiceGroup
-                              name={field.name}
-                              value={field.value as DropMode | ""}
-                              onChange={field.onChange}
-                              invalid={!!fieldState.error}
-                              className="grid-cols-1 sm:grid-cols-3"
-                              options={DROP_MODES.map((mode) => ({
-                                value: mode,
-                                label: t(TRAVEL_MODES[mode]),
-                                description: t(DROP_DESCRIPTIONS[mode]),
-                                icon: <TravelModeIcon mode={mode} />,
-                              }))}
-                            />
-                          </Field>
+                            {filled ? <RiEraserLine /> : <RiFileCopyLine />}
+                            {filled ? t("Clear") : t("Same as above")}
+                          </Button>
                         )}
+                      </div>
+                      <TripQuestions
+                        prefix={`members.${index}.`}
+                        who={name}
+                        alone={alone}
                       />
-                    )}
-                    {wantsDrop && offersPickup(dropMode) && (
-                      <Journey mode={dropMode} leg="departure" />
-                    )}
-                  </>
-                )}
+                      {index === firstDriver && vehicleQuestions}
+                    </div>
+                  )
+                })}
               </div>
-            )}
-
-            {travelMode === "other" && (
-              <Field label={t("Details (optional)")}>
-                <Input
-                  id="travelReference"
-                  placeholder={t("How are you travelling?")}
-                  {...register("travelReference")}
-                />
-              </Field>
-            )}
-
-            {travelMode === "mandal_bus" && (
-              <p className="rounded-md bg-muted px-3 py-2 text-xs/relaxed text-muted-foreground">
-                {t(
-                  "Your mandal coordinator shares the bus timing and pickup point."
-                )}
-              </p>
             )}
           </section>
 
-          <section className="flex flex-col gap-3">
-            <h3 className="font-heading text-sm font-medium">{t("Stay")}</h3>
-            <Checkbox
-              id="accommodationRequired"
-              label={
-                party
-                  ? t("We need accommodation for everyone")
-                  : alone
-                    ? t("I need accommodation from Mandir")
-                    : t("We need accommodation from Mandir")
-              }
-              description={
-                sameDay
-                  ? t(
-                      "Not needed — you arrive and leave on the same day, so there is no night's stay."
-                    )
-                  : party
+          {/* Nobody stays a night: there is no bed to ask about, so no Stay
+              section at all (the effect above keeps the box unticked). */}
+          {!sameDay && (
+            <section className="flex flex-col gap-3">
+              <h3 className="font-heading text-sm font-medium">{t("Stay")}</h3>
+              <Checkbox
+                id="accommodationRequired"
+                label={
+                  party
+                    ? t("We need accommodation for everyone")
+                    : alone
+                      ? t("I need accommodation from Mandir")
+                      : t("We need accommodation from Mandir")
+                }
+                description={
+                  party
                     ? t(
                         "Untick if only some of you need it. The accommodation team allots rooms or dormitory beds after registration closes."
                       )
                     : t(
                         "The accommodation team allots rooms or dormitory beds after registration closes."
                       )
-              }
-              disabled={sameDay}
-              {...register("accommodationRequired", {
-                onChange: onEveryoneChange,
-              })}
-            />
+                }
+                {...register("accommodationRequired", {
+                  onChange: onEveryoneChange,
+                })}
+              />
 
-            {/* The party, below the box: ticks to pick who while "for everyone"
+              {/* The party, below the box: ticks to pick who while "for everyone"
             is unticked (nobody ticked: nobody needs a bed); once it is
             ticked, a read-only pill per person showing who has a bed coming. */}
-            {party && !sameDay && (
-              <div className="flex flex-col gap-3 rounded-lg border border-border p-4">
-                <div className="flex flex-col gap-0.5">
-                  <p className="text-xs/relaxed font-medium">
-                    {forEveryone
-                      ? t("Accommodation for")
-                      : t("Who needs accommodation?")}
-                  </p>
-                  {!forEveryone && (
-                    <p className="text-2xs/relaxed text-muted-foreground">
-                      {t("Leave everyone unticked if nobody does.")}
+              {party && (
+                <div className="flex flex-col gap-3 rounded-lg border border-border p-4">
+                  <div className="flex flex-col gap-0.5">
+                    <p className="text-xs/relaxed font-medium">
+                      {forEveryone
+                        ? t("Accommodation for")
+                        : t("Who needs accommodation?")}
                     </p>
-                  )}
-                </div>
-                {forEveryone ? (
-                  <ul className="flex flex-wrap gap-2">
-                    {members.map((member, index) => {
+                    {!forEveryone && (
+                      <p className="text-2xs/relaxed text-muted-foreground">
+                        {t("Leave everyone unticked if nobody does.")}
+                      </p>
+                    )}
+                  </div>
+                  {forEveryone ? (
+                    <ul className="flex flex-wrap gap-2">
+                      {members.map((member, index) => {
+                        const noNight = isSameDayFor(dates, index)
+                        return (
+                          <li
+                            key={index}
+                            className={cn(
+                              "inline-flex items-center gap-1 rounded-sm border py-0.5 pr-1 pl-1.5 text-2xs",
+                              noNight
+                                ? "border-border text-muted-foreground"
+                                : "border-primary/30 bg-primary/5"
+                            )}
+                          >
+                            <RiHotelBedLine
+                              aria-hidden
+                              className={cn(
+                                "size-3.5 shrink-0",
+                                noNight
+                                  ? "text-muted-foreground"
+                                  : "text-primary"
+                              )}
+                            />
+                            {fullNameOf(member) ||
+                              t("Person {n}", { n: index + 1 })}
+                            {noNight ? (
+                              <span className="pr-0.5">
+                                · {t("same day, no night")}
+                              </span>
+                            ) : (
+                              <RiCheckboxCircleFill
+                                aria-label={t("has a bed coming")}
+                                className="size-3.5 shrink-0 text-primary"
+                              />
+                            )}
+                          </li>
+                        )
+                      })}
+                    </ul>
+                  ) : (
+                    members.map((member, index) => {
                       const noNight = isSameDayFor(dates, index)
                       return (
-                        <li
+                        <Checkbox
                           key={index}
-                          className={cn(
-                            "inline-flex items-center gap-1 rounded-sm border py-0.5 pr-1 pl-1.5 text-2xs",
+                          id={`members.${index}.needsAccommodation`}
+                          label={
+                            fullNameOf(member) ||
+                            t("Person {n}", { n: index + 1 })
+                          }
+                          description={
                             noNight
-                              ? "border-border text-muted-foreground"
-                              : "border-primary/30 bg-primary/5"
-                          )}
-                        >
-                          <RiHotelBedLine
-                            aria-hidden
-                            className={cn(
-                              "size-3.5 shrink-0",
-                              noNight ? "text-muted-foreground" : "text-primary"
-                            )}
-                          />
-                          {fullNameOf(member) ||
-                            t("Person {n}", { n: index + 1 })}
-                          {noNight ? (
-                            <span className="pr-0.5">
-                              · {t("same day, no night")}
-                            </span>
-                          ) : (
-                            <RiCheckboxCircleFill
-                              aria-label={t("has a bed coming")}
-                              className="size-3.5 shrink-0 text-primary"
-                            />
-                          )}
-                        </li>
+                              ? t(
+                                  "Arrives and leaves the same day — no night's stay"
+                                )
+                              : undefined
+                          }
+                          disabled={noNight}
+                          {...register(`members.${index}.needsAccommodation`)}
+                        />
                       )
-                    })}
-                  </ul>
-                ) : (
-                  members.map((member, index) => {
-                    const noNight = isSameDayFor(dates, index)
-                    return (
-                      <Checkbox
-                        key={index}
-                        id={`members.${index}.needsAccommodation`}
-                        label={
-                          fullNameOf(member) ||
-                          t("Person {n}", { n: index + 1 })
-                        }
-                        description={
-                          noNight
-                            ? t(
-                                "Arrives and leaves the same day — no night's stay"
-                              )
-                            : undefined
-                        }
-                        disabled={noNight}
-                        {...register(`members.${index}.needsAccommodation`)}
-                      />
-                    )
-                  })
-                )}
-              </div>
-            )}
-          </section>
+                    })
+                  )}
+                </div>
+              )}
+            </section>
+          )}
         </>
       )}
     </div>

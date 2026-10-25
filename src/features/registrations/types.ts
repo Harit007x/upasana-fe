@@ -30,6 +30,11 @@ export const TRAVEL_MODES = {
   local: "Local",
   /** Set when a mandal stopped being local before travel was asked. Never offered. */
   not_filled: "Not filled",
+  /**
+   * Set when the party does not all travel the same way: each person's own
+   * mode is on `Member.travel` (read it through `travelOf`). Never offered.
+   */
+  separate: "Travelling separately",
 } as const
 export type TravelMode = keyof typeof TRAVEL_MODES
 
@@ -116,6 +121,12 @@ export type Member = {
   needsAccommodation?: boolean
   /** Aged 40 or under: whether they will attend the Youth Convention. Absent when not answered. */
   attendsYouthConvention?: boolean
+  /**
+   * How this person comes and goes, only when the party travels separately
+   * (the registration's `travel.mode` is "separate"). Read it through
+   * `travelOf`, which falls back to the party's.
+   */
+  travel?: PersonTravel
 }
 
 export type Travel = {
@@ -140,6 +151,9 @@ export type Travel = {
   departureStation?: string
   departureTime?: string
 }
+
+/** One person's own travel: everything but the vehicles, which stay the party's. */
+export type PersonTravel = Omit<Travel, "vehicleCount" | "vehicleNumbers">
 
 /** A flight into or out of Ahmedabad airport. */
 export type IndiaFlight = {

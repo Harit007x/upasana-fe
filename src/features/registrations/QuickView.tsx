@@ -26,10 +26,22 @@ import { formatMobile } from "@/lib/phone"
 import { formatTime } from "@/lib/time"
 
 import { useRegistrations } from "./api"
-import { StatusBadge, TravelModeIcon } from "./components"
-import { displayName, formatIndiaFlight, formatStay } from "./format"
+import { PersonTravelList, StatusBadge, TravelModeIcon } from "./components"
+import {
+  comingByText,
+  displayName,
+  formatIndiaFlight,
+  formatStay,
+  journeyHomeText,
+} from "./format"
 import { StatusActions } from "./StatusActions"
-import { accommodationSummary, compareStay, wantsBed } from "./stay"
+import {
+  accommodationSummary,
+  compareStay,
+  travelOf,
+  travelModesOf,
+  wantsBed,
+} from "./stay"
 import { GENDERS, TRAVEL_MODES, type Registration } from "./types"
 
 /**
@@ -74,26 +86,17 @@ function shareText(r: Registration) {
     `Contact: ${contact.fullName}${contact.mobile ? `, ${formatMobile(contact.mobile)}` : ""}`,
     `Arriving: ${formatStay(r.arrival)}`,
     `Leaving: ${formatStay(r.departure)}`,
-    `By: ${[
-      TRAVEL_MODES[t.mode],
-      t.reference,
-      t.station,
-      t.arrivalTime && `reaches ${formatTime(t.arrivalTime)}`,
-    ]
-      .filter(Boolean)
-      .join(", ")}${t.needsPickup ? " · pickup needed" : ""}`,
   ]
-  if (t.needsDrop)
+  // Travelling separately: one line each, so the driver knows who is on which train.
+  const people = t.mode === "separate" ? r.members : [undefined]
+  for (const member of people) {
+    const own = member ? travelOf(r, member) : t
+    const who = member ? `${member.fullName}: ` : ""
     lines.push(
-      `Drop: ${[
-        t.departureMode && TRAVEL_MODES[t.departureMode],
-        t.departureReference,
-        t.departureStation,
-        t.departureTime && `leaves ${formatTime(t.departureTime)}`,
-      ]
-        .filter(Boolean)
-        .join(", ")}`
+      `By: ${who}${comingByText(own)}${own.needsPickup ? " · pickup needed" : ""}`
     )
+    if (own.needsDrop) lines.push(`Drop: ${who}${journeyHomeText(own)}`)
+  }
   if (r.indiaTravel?.needsPickup && r.indiaTravel.arrival)
     lines.push(`Airport pickup: ${formatIndiaFlight(r.indiaTravel.arrival)}`)
   const help = r.members.filter((m) => m.needsAssistance)
@@ -129,7 +132,8 @@ function Details({ r }: { r: Registration }) {
   const contact = r.members[0]
   const t = r.travel
   const beds = accommodationSummary(r)
-  const journey = journeyModes.includes(t.mode)
+  const separate = t.mode === "separate"
+  const journey = travelModesOf(r).some((mode) => journeyModes.includes(mode))
 
   return (
     <>
@@ -181,6 +185,11 @@ function Details({ r }: { r: Registration }) {
             />
             {[TRAVEL_MODES[t.mode], t.reference].filter(Boolean).join(" · ")}
           </span>
+          {separate && (
+            <span className="mt-1 block">
+              <PersonTravelList registration={r} />
+            </span>
+          )}
           {(t.station || t.arrivalTime) && (
             <span className="block text-muted-foreground">
               {[
@@ -191,7 +200,7 @@ function Details({ r }: { r: Registration }) {
                 .join(" · ")}
             </span>
           )}
-          {t.mode === "personal_vehicle" && (
+          {(t.mode === "personal_vehicle" || !!t.vehicleCount) && (
             <span className="block text-muted-foreground tabular-nums">
               {t.vehicleCount ?? 1}{" "}
               {(t.vehicleCount ?? 1) === 1 ? "vehicle" : "vehicles"}
@@ -213,7 +222,7 @@ function Details({ r }: { r: Registration }) {
             )}
           </Row>
         )}
-        {t.needsDrop && (
+        {t.needsDrop && !separate && (
           <Row label="Journey home">
             {[
               t.departureMode && TRAVEL_MODES[t.departureMode],

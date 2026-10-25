@@ -34,6 +34,7 @@ import {
   type RegistrationType,
   type IndiaFlight,
   type IndiaTravel,
+  type PersonTravel,
   type StayPoint,
   type TravelMode,
 } from "../types"
@@ -55,12 +56,12 @@ import {
 const isIn = (list: readonly string[]) => (value: string) =>
   list.includes(value)
 const MEAL_ANSWERS = ["yes", "no"]
-/** The travel modes the form offers: all but "local" and "not_filled", which are set, not picked. */
+/** The travel modes the form offers: all but "local", "not_filled" and "separate", which are set, not picked. */
 export const TRAVEL_CHOICES = (
   Object.keys(TRAVEL_MODES) as TravelMode[]
 ).filter(
-  (mode): mode is Exclude<TravelMode, "local" | "not_filled"> =>
-    mode !== "local" && mode !== "not_filled"
+  (mode): mode is Exclude<TravelMode, "local" | "not_filled" | "separate"> =>
+    mode !== "local" && mode !== "not_filled" && mode !== "separate"
 )
 
 /** Whether someone of this age (as typed) is asked about the Youth Convention. */
@@ -151,6 +152,35 @@ export function splitFullName(fullName: string): NameParts {
   }
 }
 
+/**
+ * How someone gets here and home: the mode, and for a train, bus or flight
+ * the pickup and drop with their journeys. Asked once for the party, or for
+ * each person when they travel separately. No vehicles: those are the party's.
+ */
+const tripFields = {
+  travelMode: z.string(),
+  travelReference: z.string().trim(),
+  // Train, bus or flight, with a pickup (and then required): when it reaches
+  // Ahmedabad ("HH:MM"); and, for a train, at which station.
+  travelTime: z.string(),
+  travelStation: z.string().trim(),
+  // Train, public bus or flight: "yes" or "no", required, unanswered until picked.
+  // The journey's details are asked, and sent, only after a "yes".
+  needsPickup: z.string(),
+  needsDrop: z.boolean(),
+  // With a drop (and then required): "train", "public_bus" or "flight" — how
+  // they leave, which need not be how they came — and the journey home, as
+  // for the one in.
+  dropMode: z.string(),
+  dropReference: z.string().trim(),
+  dropStation: z.string().trim(),
+  dropTime: z.string(),
+}
+
+/** The travel fields of the party, or of one person travelling on their own. */
+export type TripValues = { [K in keyof typeof tripFields]: z.infer<(typeof tripFields)[K]> }
+export const TRIP_FIELDS = Object.keys(tripFields) as (keyof TripValues)[]
+
 const makeMemberSchema = (t: Translate) =>
   z.object({
     // The person's id on a saved registration, sent back so the server keeps
@@ -188,6 +218,11 @@ const makeMemberSchema = (t: Translate) =>
     // Aged YOUTH_MAX_AGE or under: "yes", "no" or unanswered (optional).
     // Optional so a draft saved before it existed still loads.
     youthConvention: z.string().optional(),
+    // How this person travels, only used when the party does not all travel
+    // the same way (`hasSplitTravel`). The same names and meanings as the
+    // party's travel fields below, so one set of rules checks both; checked in
+    // superRefine.
+    ...tripFields,
   })
 
 /**
@@ -214,30 +249,18 @@ export function makeRegistrationFormSchema(lang: Lang = "en") {
       // (SLOT_MEALS). Only asked when that slot has one; checked in superRefine.
       arrivalMeal: z.string(),
       departureMeal: z.string(),
-      // Not asked of local mandals (isLocalMandal): checked in superRefine.
-      travelMode: z.string(),
+      // "Everyone travels together": unticked, each person's own travel
+      // fields are asked instead of the party's (`hasSplitTravel`).
+      sameTravel: z.boolean(),
+      // The party's travel. Not asked of local mandals (isLocalMandal), nor
+      // while each person travels on their own: checked in superRefine.
+      ...tripFields,
+      // The party's vehicles, asked whenever anyone comes by personal vehicle.
       vehicleCount: z.string().trim(),
       // One per vehicle, all optional. Longer than the count when the count
       // was lowered: kept so raising it again brings the numbers back, and
       // trimmed to the count on submit.
       vehicleNumbers: z.array(z.string().optional()),
-      travelReference: z.string().trim(),
-      // Train, bus or flight, with a pickup (and then required): when it reaches
-      // Ahmedabad ("HH:MM"); and, for a train, at which station.
-      travelTime: z.string(),
-      travelStation: z.string().trim(),
-      // Train, public bus or flight: "yes" or "no", required, unanswered until picked.
-      // The journey's details are asked, and sent, only after a "yes".
-      needsPickup: z.string(),
-      needsDrop: z.boolean(),
-      // Train, bus or flight, with a drop (and then required): the journey home, as for
-      // the one in.
-      // "train", "public_bus" or "flight": how they leave, which need not be how
-      // they came.
-      dropMode: z.string(),
-      dropReference: z.string().trim(),
-      dropStation: z.string().trim(),
-      dropTime: z.string(),
       accommodationRequired: z.boolean(),
       notes: z.string().trim(),
       consent: z
@@ -288,6 +311,49 @@ export function makeRegistrationFormSchema(lang: Lang = "en") {
         if (mealOf(slot) && !MEAL_ANSWERS.includes(answer))
           issue(path, t("Choose yes or no"))
       }
+      // How someone travels, at `path`: the party's ([]) or one person's.
+      // A pickup or a drop needs its journey: the train's number, station and
+      // time; the bus's details and time; or the flight number and time.
+      const checkTrip = (trip: TripValues, path: (string | number)[]) => {
+        if (!isIn(TRAVEL_CHOICES)(trip.travelMode)) {
+          issue([...path, "travelMode"], t("Select how you are travelling"))
+        }
+        if (!offersPickup(trip.travelMode)) return
+        if (!isIn(MEAL_ANSWERS)(trip.needsPickup)) {
+          issue([...path, "needsPickup"], t("Select Yes or No"))
+        }
+        // A drop is offered only with a pickup.
+        const drop = trip.needsPickup === "yes" && trip.needsDrop
+        if (drop && !offersPickup(trip.dropMode)) {
+          issue([...path, "dropMode"], t("Select how you are leaving"))
+        }
+        const legs = [
+          {
+            wanted: trip.needsPickup === "yes",
+            mode: trip.travelMode,
+            fields: ["travelReference", "travelStation", "travelTime"] as const,
+            timeMessage: t("Pick the arrival time"),
+          },
+          {
+            // Leaving may be by another way than arriving: its own mode.
+            wanted: drop && offersPickup(trip.dropMode),
+            mode: trip.dropMode,
+            fields: ["dropReference", "dropStation", "dropTime"] as const,
+            timeMessage: t("Pick the departure time"),
+          },
+        ]
+        for (const { wanted, mode, fields, timeMessage } of legs) {
+          if (!wanted) continue
+          const [reference, station, time] = fields
+          if (!trip[reference].trim()) {
+            issue([...path, reference], t(REFERENCE_REQUIRED[mode as DropMode]))
+          }
+          if (mode === "train" && !trip[station]) {
+            issue([...path, station], t("Pick the station"))
+          }
+          if (!trip[time]) issue([...path, time], timeMessage)
+        }
+      }
 
       if (values.type === "family" && values.groupName.length < 2) {
         issue(["groupName"], t("Enter a family name, e.g. Patel family"))
@@ -314,13 +380,25 @@ export function makeRegistrationFormSchema(lang: Lang = "en") {
         )
       }
 
-      // The same person added twice. Compared ignoring case and extra spaces,
-      // so "Harit  Patel" and "harit patel" count as one name. Flagged on the
-      // later entry, which is the one to remove or correct.
+      // The same person added twice: same name, gender and age. A shared name
+      // alone is not enough — a father and son can both be "Harit Prakashbhai
+      // Patel" — so a different age or gender lets it through. Names compared
+      // ignoring case and extra spaces. Flagged on the later entry, which is
+      // the one to remove or correct.
       const firstWithName = new Map<string, number>()
       values.members.forEach((member, index) => {
-        const key = fullNameOf(member).toLowerCase()
-        if (!member.firstName.trim() || !member.surname.trim()) return
+        const key = [
+          fullNameOf(member).toLowerCase(),
+          member.gender,
+          Number(member.age.trim()),
+        ].join("|")
+        if (
+          !member.firstName.trim() ||
+          !member.surname.trim() ||
+          !member.gender ||
+          !member.age.trim()
+        )
+          return
         const first = firstWithName.get(key)
         if (first === undefined) {
           firstWithName.set(key, index)
@@ -555,62 +633,26 @@ export function makeRegistrationFormSchema(lang: Lang = "en") {
       }
 
       // Locals are not asked how they travel; everyone else picks one of the
-      // modes on offer ("local" is set for them, never picked).
-      if (
-        !isLocalMandal(values.mandal) &&
-        !isIn(TRAVEL_CHOICES)(values.travelMode)
-      ) {
-        issue(["travelMode"], t("Select how you are travelling"))
-      }
-      if (
-        !isLocalMandal(values.mandal) &&
-        offersPickup(values.travelMode) &&
-        !isIn(MEAL_ANSWERS)(values.needsPickup)
-      ) {
-        issue(["needsPickup"], t("Select Yes or No"))
-      }
-      // A pickup or a drop needs its journey: the train's number, station and
-      // time; the bus's details and time; or the flight number and time.
-      if (!isLocalMandal(values.mandal) && offersPickup(values.travelMode)) {
-        // A drop is offered only with a pickup.
-        const drop = values.needsPickup === "yes" && values.needsDrop
-        if (drop && !offersPickup(values.dropMode)) {
-          issue(["dropMode"], t("Select how you are leaving"))
-        }
-        const legs = [
-          {
-            wanted: values.needsPickup === "yes",
-            mode: values.travelMode,
-            fields: ["travelReference", "travelStation", "travelTime"] as const,
-            timeMessage: t("Pick the arrival time"),
-          },
-          {
-            // Leaving may be by another way than arriving: its own mode.
-            wanted: drop && offersPickup(values.dropMode),
-            mode: values.dropMode,
-            fields: ["dropReference", "dropStation", "dropTime"] as const,
-            timeMessage: t("Pick the departure time"),
-          },
-        ]
-        for (const { wanted, mode, fields, timeMessage } of legs) {
-          if (!wanted) continue
-          const train = mode === "train"
-          const [reference, station, time] = fields
-          if (!values[reference].trim()) {
-            issue([reference], t(REFERENCE_REQUIRED[mode as DropMode]))
-          }
-          if (train && !values[station]) issue([station], t("Pick the station"))
-          if (!values[time]) issue([time], timeMessage)
+      // modes on offer ("local" is set for them, never picked) — once for the
+      // party, or for each person when they travel separately.
+      if (!isLocalMandal(values.mandal)) {
+        if (hasSplitTravel(values)) {
+          values.members.forEach((member, index) =>
+            checkTrip(member, ["members", index])
+          )
+        } else {
+          checkTrip(values, [])
         }
       }
 
-      if (values.travelMode === "personal_vehicle") {
-        // An individual's count is not asked (it is always one), so only a
-        // family's is checked: one to four, and no more than there are people.
+      if (comesByVehicle(values)) {
+        // Asked only when more than one vehicle is possible (never of an
+        // individual, nor of a party with one person by vehicle): one to four,
+        // and no more than the people coming by vehicle.
         const max = maxVehicles(values)
         const count = Number(values.vehicleCount)
         if (
-          values.type === "family" &&
+          asksVehicleCount(values) &&
           values.vehicleCount !== "" &&
           !(Number.isInteger(count) && count >= 1 && count <= max)
         ) {
@@ -662,17 +704,53 @@ export const MAX_VEHICLES = { individual: 1, family: 4 } as const
 /** A family's primary contact has to be at least this old. Mirrors the server. */
 export const MIN_FAMILY_CONTACT_AGE = 18
 
-type VehicleValues = Pick<
+type TravelValues = Pick<
   RegistrationFormValues,
-  "type" | "vehicleCount" | "members"
+  "type" | "members" | "mandal" | "sameTravel" | "travelMode"
 >
+type VehicleValues = TravelValues & Pick<RegistrationFormValues, "vehicleCount">
 
-/** No more vehicles than people: one for an individual, up to four for a family. */
-export function maxVehicles(
-  values: Pick<RegistrationFormValues, "type" | "members">
+/**
+ * Whether each person says how they travel. Only possible with more than one
+ * person, and never for a local mandal, which is not asked about travel.
+ */
+export function hasSplitTravel(
+  values: Pick<RegistrationFormValues, "members" | "mandal" | "sameTravel">
 ) {
-  return Math.max(1, Math.min(MAX_VEHICLES[values.type], values.members.length))
+  return (
+    values.members.length > 1 &&
+    !values.sameTravel &&
+    !isLocalMandal(values.mandal)
+  )
 }
+
+/** How many people come by personal vehicle: everyone, nobody, or those who said so. */
+export function vehicleTravellers(values: TravelValues) {
+  if (isLocalMandal(values.mandal)) return 0
+  if (hasSplitTravel(values)) {
+    return values.members.filter((m) => m.travelMode === "personal_vehicle")
+      .length
+  }
+  return values.travelMode === "personal_vehicle" ? values.members.length : 0
+}
+
+/** Whether anyone comes by personal vehicle, so the party's vehicles are asked. */
+export const comesByVehicle = (values: TravelValues) =>
+  vehicleTravellers(values) > 0
+
+/**
+ * No more vehicles than the people coming in them: one for an individual, up
+ * to four for a family.
+ */
+export function maxVehicles(values: TravelValues) {
+  return Math.max(
+    1,
+    Math.min(MAX_VEHICLES[values.type], vehicleTravellers(values))
+  )
+}
+
+/** "Number of vehicles" is asked only when more than one is possible. */
+export const asksVehicleCount = (values: TravelValues) => maxVehicles(values) > 1
 
 /**
  * How many vehicles — and vehicle-number boxes — a registration has. Always
@@ -859,8 +937,11 @@ export function relatedFields(
   values: RegistrationFormValues
 ): string[] {
   if (PARTY_DATES.includes(changed)) return PARTY_DATES
-  // Adding or removing someone changes how many vehicles are allowed.
-  if (changed === "members" || changed === "type") return ["vehicleCount"]
+  // Adding or removing someone, or who comes by vehicle, changes how many
+  // vehicles are allowed.
+  if (["members", "type", "sameTravel", "travelMode"].includes(changed)) {
+    return ["vehicleCount"]
+  }
   // Two boxes with one plate: every plate is compared with every other.
   if (/^vehicleNumbers\.\d+$/.test(changed)) {
     return values.vehicleNumbers.map((_, i) => `vehicleNumbers.${i}`)
@@ -884,6 +965,8 @@ export function relatedFields(
     // A number's valid length and first digit depend on its country code.
     case "mobileCountry":
       return [`${person}.mobile`]
+    case "travelMode":
+      return ["vehicleCount"]
     // Two people with one name: every name is compared with every other.
     // The clash shows on the first name, whichever part was changed.
     case "firstName":
@@ -982,6 +1065,7 @@ export const STEP_FIELDS = [
     "arrivalMeal",
     "departureMeal",
     "members",
+    "sameTravel",
     "travelMode",
     "needsPickup",
     "travelReference",
@@ -998,8 +1082,22 @@ export const STEP_FIELDS = [
   ["consent"],
 ] as const satisfies readonly (readonly (keyof RegistrationFormValues)[])[]
 
+export const EMPTY_TRIP: TripValues = {
+  travelMode: "",
+  travelReference: "",
+  travelTime: "",
+  travelStation: "",
+  needsPickup: "",
+  needsDrop: false,
+  dropMode: "",
+  dropReference: "",
+  dropStation: "",
+  dropTime: "",
+}
+
 export function emptyMember(): MemberFormValues {
   return {
+    ...EMPTY_TRIP,
     firstName: "",
     middleName: "",
     surname: "",
@@ -1033,18 +1131,10 @@ export const DEFAULT_VALUES: RegistrationFormValues = {
   departureSlot: "",
   arrivalMeal: "",
   departureMeal: "",
-  travelMode: "",
+  sameTravel: true,
+  ...EMPTY_TRIP,
   vehicleCount: "1",
   vehicleNumbers: [""],
-  travelReference: "",
-  travelTime: "",
-  travelStation: "",
-  needsPickup: "",
-  needsDrop: false,
-  dropMode: "",
-  dropReference: "",
-  dropStation: "",
-  dropTime: "",
   accommodationRequired: false,
   notes: "",
   consent: false,
@@ -1081,14 +1171,9 @@ export function toNewRegistration(
     slot: values.departureSlot as TimeSlot,
     meal: mealTaken(values.departureSlot, values.departureMeal),
   }
-  // Locals are not asked: they travel from home.
-  const mode: TravelMode = isLocalMandal(values.mandal)
-    ? "local"
-    : (values.travelMode as TravelMode)
+  const local = isLocalMandal(values.mandal)
   const split = hasSplitDates(values)
-  const pickup = offersPickup(mode) && values.needsPickup === "yes"
-  // A drop is offered only with a pickup.
-  const drop = pickup && values.needsDrop
+  const splitTravel = hasSplitTravel(values)
   const type: RegistrationType = values.type
 
   const beds = bedsWanted(values)
@@ -1115,6 +1200,7 @@ export function toNewRegistration(
     attendsYouthConvention: asksYouthConvention(member.age)
       ? yesNoAnswer(member.youthConvention)
       : undefined,
+    travel: splitTravel ? tripRecord(member) : undefined,
     arrival: !split
       ? arrival
       : {
@@ -1151,41 +1237,27 @@ export function toNewRegistration(
     arrival: bookingArrival,
     departure: bookingDeparture,
     travel: {
-      mode,
-      vehicleCount:
-        mode === "personal_vehicle" ? vehicleSlots(values) : undefined,
-      // Only the boxes on screen, without the blank ones.
-      vehicleNumbers:
-        mode === "personal_vehicle"
-          ? values.vehicleNumbers
+      // Locals are not asked: they travel from home. A party travelling
+      // separately only says so here; each person's way is on them.
+      ...(local
+        ? tripRecord({ ...EMPTY_TRIP, travelMode: "local" })
+        : splitTravel
+          ? {
+              ...tripRecord({ ...EMPTY_TRIP, travelMode: "separate" }),
+              needsPickup: members.some((m) => m.travel?.needsPickup),
+              needsDrop: members.some((m) => !!m.travel?.needsDrop),
+            }
+          : tripRecord(values)),
+      ...(comesByVehicle(values)
+        ? {
+            vehicleCount: vehicleSlots(values),
+            // Only the boxes on screen, without the blank ones.
+            vehicleNumbers: values.vehicleNumbers
               .slice(0, vehicleSlots(values))
               .map((number) => (number ?? "").trim().toUpperCase())
-              .filter(Boolean)
-          : undefined,
-      // By train, bus or flight, the details are asked only with a pickup.
-      reference:
-        mode === "personal_vehicle" ||
-        mode === "local" ||
-        (offersPickup(mode) && !pickup)
-          ? undefined
-          : orUndefined(asTyped(mode, values.travelReference)),
-      arrivalTime: pickup ? orUndefined(values.travelTime) : undefined,
-      station:
-        mode === "train" && pickup
-          ? orUndefined(values.travelStation)
-          : undefined,
-      needsPickup: pickup,
-      needsDrop: drop,
-      departureMode:
-        drop && offersPickup(values.dropMode) ? values.dropMode : undefined,
-      departureReference: drop
-        ? orUndefined(asTyped(values.dropMode, values.dropReference))
-        : undefined,
-      departureStation:
-        drop && values.dropMode === "train"
-          ? orUndefined(values.dropStation)
-          : undefined,
-      departureTime: drop ? orUndefined(values.dropTime) : undefined,
+              .filter(Boolean),
+          }
+        : {}),
     },
     accommodationRequired: beds.some(Boolean),
     indiaTravel: indiaTravelOf(values),
@@ -1193,6 +1265,65 @@ export function toNewRegistration(
     source,
     // How the contact's number is vouched for. Nothing when an edit keeps it.
     ...contactProof(values),
+  }
+}
+
+/**
+ * The party's travel, or one person's, as saved: by train, bus or flight the
+ * details only with a pickup, and the journey home only with a drop.
+ */
+function tripRecord(trip: TripValues): PersonTravel {
+  const mode = trip.travelMode as TravelMode
+  const pickup = offersPickup(mode) && trip.needsPickup === "yes"
+  // A drop is offered only with a pickup.
+  const drop = pickup && trip.needsDrop
+  return {
+    mode,
+    reference:
+      mode === "personal_vehicle" ||
+      mode === "local" ||
+      mode === "separate" ||
+      (offersPickup(mode) && !pickup)
+        ? undefined
+        : orUndefined(asTyped(mode, trip.travelReference)),
+    arrivalTime: pickup ? orUndefined(trip.travelTime) : undefined,
+    station:
+      mode === "train" && pickup ? orUndefined(trip.travelStation) : undefined,
+    needsPickup: pickup,
+    needsDrop: drop,
+    departureMode:
+      drop && offersPickup(trip.dropMode) ? trip.dropMode : undefined,
+    departureReference: drop
+      ? orUndefined(asTyped(trip.dropMode, trip.dropReference))
+      : undefined,
+    departureStation:
+      drop && trip.dropMode === "train"
+        ? orUndefined(trip.dropStation)
+        : undefined,
+    departureTime: drop ? orUndefined(trip.dropTime) : undefined,
+  }
+}
+
+/** A saved journey back as the form's travel fields. */
+function tripValues(travel: PersonTravel): TripValues {
+  return {
+    travelMode: travel.mode,
+    travelReference: travel.reference ?? "",
+    travelTime: travel.arrivalTime ?? "",
+    travelStation: travel.station ?? "",
+    needsPickup: offersPickup(travel.mode)
+      ? travel.needsPickup
+        ? "yes"
+        : "no"
+      : "",
+    needsDrop: travel.needsDrop ?? false,
+    // Before it was asked, leaving was the way they came.
+    dropMode:
+      travel.departureMode ??
+      (travel.needsDrop && offersPickup(travel.mode) ? travel.mode : ""),
+    dropReference: travel.departureReference ?? "",
+    dropStation: travel.departureStation ?? "",
+    dropTime: travel.departureTime ?? "",
   }
 }
 
@@ -1212,6 +1343,7 @@ export function fromRegistration(
   registration: Registration
 ): RegistrationFormValues {
   const split = hasSplitSchedule(registration)
+  const splitTravel = registration.travel.mode === "separate"
   const members = registration.members.map((member) => {
     const phone = member.mobile ? fromE164(member.mobile) : undefined
     return {
@@ -1240,6 +1372,7 @@ export function fromRegistration(
       arrivalMeal: split ? mealAnswer(member.arrival) : "",
       departureMeal: split ? mealAnswer(member.departure) : "",
       needsAccommodation: wantsBed(registration, member),
+      ...(splitTravel && member.travel ? tripValues(member.travel) : {}),
     }
   })
   // "Everyone" stays ticked only when everyone who stays a night has a bed; a
@@ -1263,30 +1396,13 @@ export function fromRegistration(
     departureSlot: registration.departure.slot,
     arrivalMeal: mealAnswer(registration.arrival),
     departureMeal: mealAnswer(registration.departure),
-    travelMode: registration.travel.mode,
+    sameTravel: !splitTravel,
+    ...(splitTravel ? {} : tripValues(registration.travel)),
     vehicleCount: String(count),
     vehicleNumbers: [
       ...numbers,
       ...Array<string>(Math.max(1, count) - numbers.length).fill(""),
     ].slice(0, Math.max(1, count, numbers.length)),
-    travelReference: registration.travel.reference ?? "",
-    travelTime: registration.travel.arrivalTime ?? "",
-    travelStation: registration.travel.station ?? "",
-    needsPickup: offersPickup(registration.travel.mode)
-      ? registration.travel.needsPickup
-        ? "yes"
-        : "no"
-      : "",
-    needsDrop: registration.travel.needsDrop ?? false,
-    // Before it was asked, leaving was the way they came.
-    dropMode:
-      registration.travel.departureMode ??
-      (registration.travel.needsDrop && offersPickup(registration.travel.mode)
-        ? registration.travel.mode
-        : ""),
-    dropReference: registration.travel.departureReference ?? "",
-    dropStation: registration.travel.departureStation ?? "",
-    dropTime: registration.travel.departureTime ?? "",
     accommodationRequired: registration.accommodationRequired && everyone,
     ...fromIndiaTravel(registration.indiaTravel),
     notes: registration.notes ?? "",

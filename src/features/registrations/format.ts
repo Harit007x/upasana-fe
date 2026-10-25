@@ -2,7 +2,13 @@ import { TIME_SLOTS, formatStayDate, mealOf, toLocalDate } from "@/config/event"
 import { localeOf, translator, type Lang } from "@/i18n/translate"
 import { formatTime } from "@/lib/time"
 
-import type { IndiaFlight, Registration, StayPoint } from "./types"
+import {
+  TRAVEL_MODES,
+  type IndiaFlight,
+  type PersonTravel,
+  type Registration,
+  type StayPoint,
+} from "./types"
 
 /** "Thu 24 Dec · Day before, evening · with dinner" */
 export function formatStay(point: StayPoint, lang: Lang = "en") {
@@ -53,4 +59,28 @@ export function formatCreatedAt(iso: string) {
     hour: "numeric",
     minute: "2-digit",
   }).format(new Date(iso))
+}
+
+/** "Train · 12009 Shatabdi Exp · Sabarmati · reaches 6:30 am": how someone gets here. */
+export function comingByText(travel: PersonTravel) {
+  return [
+    TRAVEL_MODES[travel.mode],
+    travel.reference,
+    travel.station,
+    travel.arrivalTime && `reaches ${formatTime(travel.arrivalTime)}`,
+  ]
+    .filter(Boolean)
+    .join(" · ")
+}
+
+/** "Train · 12010 Shatabdi Exp · Kalupur · leaves 6:45 pm": the journey home, given with a drop. */
+export function journeyHomeText(travel: PersonTravel) {
+  return [
+    travel.departureMode && TRAVEL_MODES[travel.departureMode],
+    travel.departureReference,
+    travel.departureStation,
+    travel.departureTime && `leaves ${formatTime(travel.departureTime)}`,
+  ]
+    .filter(Boolean)
+    .join(" · ")
 }

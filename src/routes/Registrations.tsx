@@ -28,7 +28,11 @@ import {
   formatMeal,
 } from "@/features/registrations/format"
 import { SampleDataToggle } from "@/features/registrations/SampleDataToggle"
-import { wantsBed } from "@/features/registrations/stay"
+import {
+  travelModesOf,
+  travelOf,
+  wantsBed,
+} from "@/features/registrations/stay"
 import { isAdmin, useSession } from "@/lib/auth-client"
 import { formatMobile } from "@/lib/phone"
 import { formatTime } from "@/lib/time"
@@ -98,7 +102,10 @@ function downloadCsv(registrations: Registration[]) {
     "Number confirmed",
   ]
   const rows = registrations.flatMap((r) =>
-    r.members.map((m) => [
+    r.members.map((m) => {
+      // Their own way here when the party travels separately; vehicles are the party's.
+      const travel = travelOf(r, m)
+      return [
       m.code ?? "",
       r.type === "family" ? r.code : "",
       REGISTRATION_STATUSES[r.status],
@@ -116,16 +123,16 @@ function downloadCsv(registrations: Registration[]) {
       m.departure.date,
       m.departure.slot,
       formatMeal(m.departure),
-      TRAVEL_MODES[r.travel.mode],
+      TRAVEL_MODES[travel.mode],
       (r.travel.vehicleNumbers ?? []).join("; "),
-      r.travel.station ?? "",
-      r.travel.arrivalTime ? formatTime(r.travel.arrivalTime) : "",
-      r.travel.needsPickup ? "Yes" : "",
-      r.travel.needsDrop ? "Yes" : "",
-      r.travel.departureMode ? TRAVEL_MODES[r.travel.departureMode] : "",
-      r.travel.departureReference ?? "",
-      r.travel.departureStation ?? "",
-      r.travel.departureTime ? formatTime(r.travel.departureTime) : "",
+      travel.station ?? "",
+      travel.arrivalTime ? formatTime(travel.arrivalTime) : "",
+      travel.needsPickup ? "Yes" : "",
+      travel.needsDrop ? "Yes" : "",
+      travel.departureMode ? TRAVEL_MODES[travel.departureMode] : "",
+      travel.departureReference ?? "",
+      travel.departureStation ?? "",
+      travel.departureTime ? formatTime(travel.departureTime) : "",
       r.indiaTravel?.arrival ? formatIndiaFlight(r.indiaTravel.arrival) : "",
       r.indiaTravel?.departure
         ? formatIndiaFlight(r.indiaTravel.departure)
@@ -142,7 +149,8 @@ function downloadCsv(registrations: Registration[]) {
         : r.mobileVerification === "in_person"
           ? `In person (${r.verifiedByName ?? ""})`
           : "",
-    ])
+      ]
+    })
   )
   const csv = [header, ...rows]
     .map((row) =>
@@ -190,7 +198,10 @@ export function Registrations() {
           (!params.get("type") || r.type === params.get("type")) &&
           (!params.get("mandal") || r.mandal === params.get("mandal")) &&
           (!params.get("status") || r.status === params.get("status")) &&
-          (!params.get("travel") || r.travel.mode === params.get("travel"))
+          // A party travelling separately matches each of its ways too.
+          (!params.get("travel") ||
+            r.travel.mode === params.get("travel") ||
+            travelModesOf(r).some((mode) => mode === params.get("travel")))
       ),
     [registrations, params, query]
   )

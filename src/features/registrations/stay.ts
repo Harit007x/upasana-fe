@@ -1,6 +1,12 @@
 import { EVENT, TIME_SLOTS, type TimeSlot } from "@/config/event"
 
-import type { Member, Registration, StayPoint } from "./types"
+import type {
+  Member,
+  PersonTravel,
+  Registration,
+  StayPoint,
+  TravelMode,
+} from "./types"
 
 const SLOT_ORDER = Object.keys(TIME_SLOTS) as TimeSlot[]
 
@@ -65,4 +71,22 @@ export function accommodationSummary(registration: Registration) {
   return wanting === registration.members.length
     ? "Yes"
     : `${wanting} of ${registration.members.length}`
+}
+
+/**
+ * How this person travels: their own when the party travels separately, else
+ * the party's. Vehicles are only ever on the registration's `travel`.
+ */
+export function travelOf(
+  registration: Pick<Registration, "travel">,
+  member: Pick<Member, "travel">
+): PersonTravel {
+  return member.travel ?? registration.travel
+}
+
+/** Every way the party travels: the one mode, or each person's when they travel separately. */
+export function travelModesOf(registration: Registration): TravelMode[] {
+  return [
+    ...new Set(registration.members.map((m) => travelOf(registration, m).mode)),
+  ]
 }

@@ -238,6 +238,19 @@ export const GU: Record<string, string> = {
   "Everyone arrives and leaves together": "બધા સાથે જ આવશે અને સાથે જ જશે",
   "Untick if someone in the party comes later or leaves earlier.":
     "જો કોઈ મોડું આવે કે વહેલું જાય તો ટીક કાઢી નાખો.",
+  "Everyone travels together": "બધા સાથે એક જ રીતે મુસાફરી કરશે",
+  "Untick if some of you come a different way — for example, some by train and some by flight.":
+    "જો કોઈ અલગ રીતે આવે તો ટીક કાઢી નાખો — દા.ત. કોઈ ટ્રેનમાં અને કોઈ ફ્લાઇટમાં.",
+  "How is {name} travelling?": "{name} કેવી રીતે આવશે?",
+  "Does {name} need a pickup in Ahmedabad?":
+    "શું {name} ને અમદાવાદમાં લેવા આવવાની (પિકઅપ) જરૂર છે?",
+  "{name} needs a drop when leaving":
+    "પરત જતી વખતે {name} ને ડ્રોપની જરૂર છે",
+  "How is {name} leaving?": "{name} કેવી રીતે પરત જશે?",
+  "Clear {name}'s travel": "{name} ની મુસાફરીની વિગત ભૂંસો",
+  "Copy {name}'s travel": "{name} ની મુસાફરીની વિગત અહીં ભરો",
+  "Travelling separately": "અલગ અલગ રીતે મુસાફરી",
+  Vehicles: "વાહનો",
   Arriving: "આગમન",
   Leaving: "પ્રસ્થાન",
   Day: "દિવસ",

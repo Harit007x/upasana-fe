@@ -18,7 +18,7 @@ import {
   DialogFooter,
   DialogHeader,
 } from "@/components/ui/dialog"
-import { Field, Textarea } from "@/components/ui/input"
+import { Field, Input, Textarea } from "@/components/ui/input"
 import { Card, EmptyState, Skeleton } from "@/components/ui/primitives"
 import { NativeSelect } from "@/components/ui/select"
 import {
@@ -62,11 +62,38 @@ const rupees = new Intl.NumberFormat("en-IN", {
   maximumFractionDigits: 2,
 })
 
-/** People listed under "See who". The send itself always covers everyone. */
-const SHOWN_PEOPLE = 100
+/** People listed under "See who" at once; past this, searching finds the rest. */
+const SHOWN_PEOPLE = 200
 
 /** Digits only, the way the server compares numbers. */
 const digitsOf = (mobile: string) => mobile.replace(/\D/g, "")
+
+const keyOf = ({ registration, member }: Person) =>
+  `${registration.id}:${member.id}`
+
+/**
+ * Who is ticked, kept as "everyone except" or "no one except" rather than as a
+ * list of the ticked, so a filter that brings new people in ticks them when
+ * everyone is ticked and leaves them unticked after "Untick everyone".
+ */
+type Selection = { mode: "all" | "none"; toggled: Set<string> }
+
+const isTicked = (selection: Selection, person: Person) =>
+  (selection.mode === "all") !== selection.toggled.has(keyOf(person))
+
+/** Name, registration or DM number, mandal or phone number. */
+function matchesSearch({ registration, member }: Person, search: string) {
+  const query = search.trim().toLowerCase()
+  if (!query) return true
+  const digits = query.replace(/\D/g, "")
+  return (
+    member.fullName.toLowerCase().includes(query) ||
+    registration.code.toLowerCase().includes(query) ||
+    (member.code ?? "").toLowerCase().includes(query) ||
+    registration.mandal.toLowerCase().includes(query) ||
+    (digits.length >= 3 && digitsOf(member.mobile ?? "").includes(digits))
+  )
+}
 
 /**
  * Who it goes to, as the server will decide it: everyone picked who has a
@@ -197,8 +224,8 @@ function ConfirmDialog({
 /**
  * `/admin/messages/new`: one WhatsApp template to the registered devotees the
  * filters pick — the same filters as Reports, kept in the URL so a report can
- * be opened here as it is. Admin only. Every person with a mobile gets it
- * once; dummy registrations never.
+ * be opened here as it is, then ticked or unticked by hand. Admin only. Each
+ * ticked number gets it once; dummy registrations never.
  */
 export function NewMessage() {
   const navigate = useNavigate()
@@ -238,6 +265,30 @@ export function NewMessage() {
     [people]
   )
 
+  // Ticking people by hand, within what the filters pick.
+  const [selection, setSelection] = React.useState<Selection>({
+    mode: "all",
+    toggled: new Set(),
+  })
+  const [search, setSearch] = React.useState("")
+  const picked = React.useMemo(
+    () => recipients.filter((person) => isTicked(selection, person)),
+    [recipients, selection]
+  )
+  const unticked = recipients.length - picked.length
+  const shown = React.useMemo(
+    () => recipients.filter((person) => matchesSearch(person, search)),
+    [recipients, search]
+  )
+  const toggle = (person: Person) =>
+    setSelection((current) => {
+      const toggled = new Set(current.toggled)
+      const key = keyOf(person)
+      if (toggled.has(key)) toggled.delete(key)
+      else toggled.add(key)
+      return { ...current, toggled }
+    })
+
   // The message: which template, in which language, filled how.
   const [templateName, setTemplateName] = React.useState("")
   const [languageCode, setLanguageCode] = React.useState("")
@@ -268,16 +319,18 @@ export function NewMessage() {
   const missingText = variables.some(
     (v) => v.source === "text" && !cleanParam(v.text)
   )
-  const first = recipients[0]
+  const first = picked[0]
   const preview =
     language &&
     renderBody(
       language.body,
       variables.map((spec) =>
-        first
-          ? valueFor(spec, first.registration, first.member)
-          : spec.source === "text"
-            ? cleanParam(spec.text) || "…"
+        // Text not typed yet shows as "…": valueFor would put the
+        // registration number in its place, which reads as part of the message.
+        spec.source === "text"
+          ? cleanParam(spec.text) || "…"
+          : first
+            ? valueFor(spec, first.registration, first.member)
             : `[${catalogue.data?.sources[spec.source] ?? spec.source}]`
       )
     )
@@ -290,11 +343,16 @@ export function NewMessage() {
           template: template.name,
           language: language.code,
           variables,
-          picks: recipients.map(({ registration, member }) => ({
+          picks: picked.map(({ registration, member }) => ({
             registrationId: registration.id,
             memberId: member.id,
           })),
-          summary: describeReport(report, filters).join(" · "),
+          summary: [
+            ...describeReport(report, filters),
+            ...(unticked > 0
+              ? [`${picked.length} of ${recipients.length} ticked by hand`]
+              : []),
+          ].join(" · "),
         }
       : null
   const [confirming, setConfirming] = React.useState(false)
@@ -393,10 +451,10 @@ export function NewMessage() {
           <div className="flex flex-col gap-1">
             <p className="flex items-baseline gap-2">
               <span className="font-heading text-2xl font-semibold tabular-nums">
-                {number.format(recipients.length)}
+                {number.format(picked.length)}
               </span>
               <span className="text-sm text-muted-foreground">
-                WhatsApp {recipients.length === 1 ? "number" : "numbers"}
+                WhatsApp {picked.length === 1 ? "number" : "numbers"}
               </span>
             </p>
             <p className="text-2xs/relaxed text-muted-foreground tabular-nums">
@@ -405,6 +463,7 @@ export function NewMessage() {
               {noNumber > 0 && ` · ${number.format(noNumber)} without a number`}
               {duplicate > 0 &&
                 ` · ${number.format(duplicate)} share a number already counted`}
+              {unticked > 0 && ` · ${number.format(unticked)} unticked by you`}
             </p>
             {recipients.length > 0 && (
               <button
@@ -418,35 +477,90 @@ export function NewMessage() {
                     showPeople && "rotate-180"
                   )}
                 />
-                {showPeople ? "Hide the list" : "See who"}
+                {showPeople
+                  ? "Hide the list"
+                  : "See who, and tick or untick people"}
               </button>
             )}
             {showPeople && (
-              <ul className="mt-1 divide-y divide-border rounded-md border border-border">
-                {recipients
-                  .slice(0, SHOWN_PEOPLE)
-                  .map(({ registration, member }) => (
-                    <li
-                      key={`${registration.id}:${member.id}`}
-                      className="flex flex-wrap items-center justify-between gap-x-3 gap-y-0.5 px-3 py-2 text-2xs"
+              <div className="mt-1 flex flex-col gap-2">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                  <Input
+                    type="search"
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    placeholder="Search name, DM number, mandal or phone"
+                    aria-label="Search the list"
+                    className="sm:max-w-xs"
+                  />
+                  <div className="flex gap-1 sm:ml-auto">
+                    <Button
+                      variant="ghost"
+                      size="lg"
+                      disabled={selection.mode === "all" && unticked === 0}
+                      onClick={() =>
+                        setSelection({ mode: "all", toggled: new Set() })
+                      }
                     >
-                      <span className="flex min-w-0 flex-col">
-                        <span className="font-medium">{member.fullName}</span>
-                        <span className="text-muted-foreground">
-                          {registration.mandal} · {registration.code}
-                        </span>
-                      </span>
-                      <span className="text-muted-foreground tabular-nums">
-                        {showNumber(digitsOf(member.mobile ?? ""))}
-                      </span>
-                    </li>
-                  ))}
-                {recipients.length > SHOWN_PEOPLE && (
-                  <li className="px-3 py-2 text-2xs text-muted-foreground">
-                    and {number.format(recipients.length - SHOWN_PEOPLE)} more
-                  </li>
+                      Tick everyone
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="lg"
+                      disabled={picked.length === 0}
+                      onClick={() =>
+                        setSelection({ mode: "none", toggled: new Set() })
+                      }
+                    >
+                      Untick everyone
+                    </Button>
+                  </div>
+                </div>
+                {shown.length === 0 ? (
+                  <p className="rounded-md border border-border px-3 py-2 text-2xs text-muted-foreground">
+                    Nobody in this list matches "{search.trim()}".
+                  </p>
+                ) : (
+                  <ul className="divide-y divide-border rounded-md border border-border">
+                    {shown.slice(0, SHOWN_PEOPLE).map((person) => {
+                      const { registration, member } = person
+                      return (
+                        <li key={keyOf(person)}>
+                          {/* The whole row is the label, so a click anywhere on it ticks. */}
+                          <label className="flex cursor-pointer flex-wrap items-center justify-between gap-x-3 gap-y-0.5 px-3 py-2 text-2xs transition-colors select-none hover:bg-muted/60 has-focus-visible:bg-muted/60">
+                            <span className="flex min-w-0 items-start gap-3 sm:gap-2.5">
+                              <input
+                                type="checkbox"
+                                checked={isTicked(selection, person)}
+                                onChange={() => toggle(person)}
+                                className="mt-0.5 size-5 shrink-0 cursor-pointer accent-primary sm:size-3.5"
+                              />
+                              <span className="flex min-w-0 flex-col gap-0.5">
+                                <span className="text-xs/relaxed font-medium">
+                                  {member.fullName}
+                                </span>
+                                <span className="text-muted-foreground">
+                                  {registration.mandal} ·{" "}
+                                  {member.code || registration.code}
+                                </span>
+                              </span>
+                            </span>
+                            <span className="text-muted-foreground tabular-nums">
+                              {showNumber(digitsOf(member.mobile ?? ""))}
+                            </span>
+                          </label>
+                        </li>
+                      )
+                    })}
+                    {shown.length > SHOWN_PEOPLE && (
+                      <li className="px-3 py-2 text-2xs text-muted-foreground">
+                        and {number.format(shown.length - SHOWN_PEOPLE)} more —
+                        search to find someone
+                      </li>
+                    )}
+                  </ul>
                 )}
-              </ul>
+              </div>
             )}
           </div>
         )}
@@ -590,7 +704,7 @@ export function NewMessage() {
           onClick={review}
           disabled={
             !template ||
-            recipients.length === 0 ||
+            picked.length === 0 ||
             missingText ||
             estimate.isPending
           }
@@ -599,7 +713,7 @@ export function NewMessage() {
           {estimate.isPending ? "Checking…" : "Review and send"}
         </Button>
       </div>
-      {missingText && recipients.length > 0 && template && (
+      {missingText && picked.length > 0 && template && (
         <p className="-mt-2 text-right text-2xs text-muted-foreground">
           Type the text for every blank first.
         </p>

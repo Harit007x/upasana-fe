@@ -356,6 +356,13 @@ export const FILTERS: FilterDef[] = [
       member.attendsYouthConvention != null &&
       flag(member.attendsYouthConvention, v),
   },
+  {
+    key: "seva",
+    label: "Swayam Sevak (early seva)",
+    group: "who",
+    options: YES_NO,
+    test: ({ registration }, v) => flag(!!registration.earlySeva, v),
+  },
 
   // When
   {
@@ -492,19 +499,36 @@ export const FILTERS: FilterDef[] = [
   },
 ]
 
-/** Landing dates come from the data: NRIs can land days before the event. */
-export function withFlightDays(filters: FilterDef[], people: Person[]) {
-  const days = [
-    ...new Set(
-      people
-        .map((p) => p.registration.indiaTravel?.arrival?.date)
-        .filter((d): d is string => !!d)
-    ),
-  ].sort()
+/**
+ * Days that come from the data: NRIs can land days before the event, and a
+ * Swayam Sevak arriving early for seva can come or go on any day of January
+ * or February — so "Arriving on" and "Leaving on" offer the event days plus
+ * any other day someone actually picked.
+ */
+export function withDataDays(filters: FilterDef[], people: Person[]) {
+  const daysOf = (dates: (string | undefined)[]) =>
+    [...new Set(dates.filter((d): d is string => !!d))]
+      .sort()
+      .map((d): Option => [d, formatDay(d)])
+  const landing = daysOf(
+    people.map((p) => p.registration.indiaTravel?.arrival?.date)
+  )
+  const arriving = daysOf([
+    ...EVENT.days,
+    ...people.map((p) => p.member.arrival.date),
+  ])
+  const leaving = daysOf([
+    ...EVENT.days,
+    ...people.map((p) => p.member.departure.date),
+  ])
   return filters.map((f) =>
     f.key === "flightDay"
-      ? { ...f, options: days.map((d): Option => [d, formatDay(d)]) }
-      : f
+      ? { ...f, options: landing }
+      : f.key === "arrive"
+        ? { ...f, options: arriving }
+        : f.key === "leave"
+          ? { ...f, options: leaving }
+          : f
   )
 }
 
@@ -606,6 +630,10 @@ export const DIMENSIONS = {
             ? "Attending"
             : "Not attending",
     }),
+  },
+  seva: {
+    label: "Swayam Sevak (early seva)",
+    of: (p) => ({ label: p.registration.earlySeva ? "Yes" : "No" }),
   },
 } satisfies Record<string, DimensionDef>
 export type Dimension = keyof typeof DIMENSIONS
@@ -851,6 +879,10 @@ export const COLUMNS = {
     label: "Youth Convention",
     person: true,
     value: (p) => yesNo(p.member.attendsYouthConvention),
+  },
+  seva: {
+    label: "Swayam Sevak (early seva)",
+    value: (p) => (p.registration.earlySeva ? "Yes" : "No"),
   },
   notes: { label: "Notes", value: (p) => p.registration.notes ?? "" },
 } satisfies Record<string, ColumnDef>

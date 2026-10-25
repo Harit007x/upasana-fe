@@ -49,7 +49,7 @@ import {
   reportExport,
   walkInGuests,
   walkInLine,
-  withFlightDays,
+  withDataDays,
   writeReport,
   type Column,
   type Dimension,
@@ -255,7 +255,7 @@ export function Reports() {
     [registrations]
   )
   const filters = React.useMemo(
-    () => withFlightDays(FILTERS, everyone),
+    () => withDataDays(FILTERS, everyone),
     [everyone]
   )
   const people = React.useMemo(

@@ -7,6 +7,7 @@ import {
   isLocalMandal,
   ARRIVAL_DATES,
   DEPARTURE_DATES,
+  SEVA_DATES,
   TIME_SLOTS,
   EVENT,
   formatDay,
@@ -108,6 +109,15 @@ const mealAnswer = (point: StayPoint) =>
   point.meal === undefined ? "" : point.meal ? "yes" : "no"
 const ARRIVAL_DATE_VALUES: readonly string[] = ARRIVAL_DATES
 const DEPARTURE_DATE_VALUES: readonly string[] = DEPARTURE_DATES
+
+/**
+ * The days that may be picked for arriving and leaving: around the event, or
+ * all of January and February 2027 for a Swayam Sevak arriving early for seva.
+ */
+export const arrivalDays = (earlySeva: boolean) =>
+  earlySeva ? SEVA_DATES : ARRIVAL_DATE_VALUES
+export const departureDays = (earlySeva: boolean) =>
+  earlySeva ? SEVA_DATES : DEPARTURE_DATE_VALUES
 const SLOT_VALUES = Object.keys(TIME_SLOTS)
 
 /** One part of a name, in English letters (see hasNonLatinLetters). Required unless `missing` is not given. */
@@ -239,6 +249,9 @@ export function makeRegistrationFormSchema(lang: Lang = "en") {
       mandal: z.string().refine(isIn(MANDALS), t("Select your mandal")),
       members: z.array(memberSchema),
       sameSchedule: z.boolean(),
+      // "Arriving early for seva as a Swayam Sevak": optional. Ticked, every
+      // date picker offers all of January and February 2027 (SEVA_DATES).
+      earlySeva: z.boolean(),
       // The party's dates. Only asked for while everyone travels together —
       // checked in superRefine, since with split dates they are not on screen.
       arrivalDate: z.string(),
@@ -497,12 +510,14 @@ export function makeRegistrationFormSchema(lang: Lang = "en") {
         )
       }
 
+      const arrivalChoices = arrivalDays(values.earlySeva)
+      const departureChoices = departureDays(values.earlySeva)
       if (!hasSplitDates(values)) {
-        if (!isIn(ARRIVAL_DATE_VALUES)(values.arrivalDate))
+        if (!isIn(arrivalChoices)(values.arrivalDate))
           issue(["arrivalDate"], t("Select the arrival day"))
         if (!isIn(SLOT_VALUES)(values.arrivalSlot))
           issue(["arrivalSlot"], t("Select a time"))
-        if (!isIn(DEPARTURE_DATE_VALUES)(values.departureDate))
+        if (!isIn(departureChoices)(values.departureDate))
           issue(["departureDate"], t("Select the departure day"))
         if (!isIn(SLOT_VALUES)(values.departureSlot))
           issue(["departureSlot"], t("Select a time"))
@@ -518,8 +533,8 @@ export function makeRegistrationFormSchema(lang: Lang = "en") {
           slot: values.departureSlot,
         } as StayPoint
         const datesPicked =
-          isIn(ARRIVAL_DATE_VALUES)(values.arrivalDate) &&
-          isIn(DEPARTURE_DATE_VALUES)(values.departureDate) &&
+          isIn(arrivalChoices)(values.arrivalDate) &&
+          isIn(departureChoices)(values.departureDate) &&
           isIn(SLOT_VALUES)(values.arrivalSlot) &&
           isIn(SLOT_VALUES)(values.departureSlot)
         if (datesPicked && compareStay(departure, arrival) <= 0) {
@@ -540,10 +555,10 @@ export function makeRegistrationFormSchema(lang: Lang = "en") {
           )
           // Both checked, not one then the other, so every gap shows at once.
           const arrivalPicked =
-            isIn(ARRIVAL_DATE_VALUES)(member.arrivalDate) &&
+            isIn(arrivalChoices)(member.arrivalDate) &&
             isIn(SLOT_VALUES)(member.arrivalSlot)
           const departurePicked =
-            isIn(DEPARTURE_DATE_VALUES)(member.departureDate) &&
+            isIn(departureChoices)(member.departureDate) &&
             isIn(SLOT_VALUES)(member.departureSlot)
           if (!arrivalPicked)
             issue([...path, "arrivalDate"], t("Select arrival"))
@@ -937,6 +952,17 @@ export function relatedFields(
   values: RegistrationFormValues
 ): string[] {
   if (PARTY_DATES.includes(changed)) return PARTY_DATES
+  // Which days are allowed depends on it, for the party and for each person.
+  if (changed === "earlySeva") {
+    return [
+      "arrivalDate",
+      "departureDate",
+      ...values.members.flatMap((_, i) => [
+        `members.${i}.arrivalDate`,
+        `members.${i}.departureDate`,
+      ]),
+    ]
+  }
   // Adding or removing someone, or who comes by vehicle, changes how many
   // vehicles are allowed.
   if (["members", "type", "sameTravel", "travelMode"].includes(changed)) {
@@ -1058,6 +1084,7 @@ export const STEP_FIELDS = [
   ["type", "groupName", "mandal", "indiaArrivalDate", "indiaDepartureDate"],
   ["members"],
   [
+    "earlySeva",
     "arrivalDate",
     "arrivalSlot",
     "departureDate",
@@ -1125,6 +1152,7 @@ export const DEFAULT_VALUES: RegistrationFormValues = {
   mandal: "",
   members: [emptyMember()],
   sameSchedule: true,
+  earlySeva: false,
   arrivalDate: "",
   arrivalSlot: "",
   departureDate: "",
@@ -1260,6 +1288,7 @@ export function toNewRegistration(
         : {}),
     },
     accommodationRequired: beds.some(Boolean),
+    earlySeva: values.earlySeva,
     indiaTravel: indiaTravelOf(values),
     notes: orUndefined(values.notes),
     source,
@@ -1390,6 +1419,7 @@ export function fromRegistration(
     mandal: registration.mandal,
     members,
     sameSchedule: !split,
+    earlySeva: registration.earlySeva ?? false,
     arrivalDate: registration.arrival.date,
     arrivalSlot: registration.arrival.slot,
     departureDate: registration.departure.date,

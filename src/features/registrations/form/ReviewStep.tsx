@@ -240,6 +240,11 @@ export function ReviewStep({
           {editButton(2)}
         </div>
         <dl className="divide-y divide-border">
+          {values.earlySeva && (
+            <Row label={t("Seva")}>
+              {t("Arriving early as a Swayam Sevak")}
+            </Row>
+          )}
           {/* What the whole party shares first, then each person's own. */}
           {!splitDates && (
             <>

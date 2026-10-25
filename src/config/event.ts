@@ -24,7 +24,25 @@ export const DEPARTURE_DATES = ARRIVAL_DATES
 /** Every day a guest can be here, first to last. */
 export const STAY_DATES = ARRIVAL_DATES
 
-export type StayDate = (typeof STAY_DATES)[number]
+/** "2027-01-01" … "2027-02-28": every calendar day from `first` to `last`. */
+function daysBetween(first: string, last: string) {
+  const days: string[] = []
+  for (let d = new Date(`${first}T00:00:00Z`); d.toISOString().slice(0, 10) <= last; ) {
+    days.push(d.toISOString().slice(0, 10))
+    d = new Date(d.getTime() + 86_400_000)
+  }
+  return days
+}
+
+/**
+ * Days someone arriving early for seva as a Swayam Sevak may pick for
+ * arriving and leaving: all of January and February 2027. Everyone else picks
+ * from ARRIVAL_DATES / DEPARTURE_DATES. Mirrors SEVA_DATES on the server.
+ */
+export const SEVA_DATES: readonly string[] = daysBetween("2027-01-01", "2027-02-28")
+
+/** A day someone can be here: one of STAY_DATES, or of SEVA_DATES for a Swayam Sevak. */
+export type StayDate = string
 
 /**
  * Mandals guests register under, grouped as the mandal dropdowns show them.
@@ -178,17 +196,28 @@ export function formatDay(iso: string, lang: Lang = "en") {
   return formatterFor(lang, "day").format(toLocalDate(iso))
 }
 
-/** "Fri 25 Dec · Day 1", or "Thu 24 Dec · Day before" for the dates either side. */
+/** The ISO day `n` days after `iso` (before, when negative). */
+const shiftDay = (iso: string, n: number) =>
+  new Date(Date.parse(`${iso}T00:00:00Z`) + n * 86_400_000).toISOString().slice(0, 10)
+
+/**
+ * "Fri 25 Dec · Day 1", or "Thu 24 Dec · Day before" for the dates either
+ * side; just "Sun 10 Jan" for a day further out, which only a Swayam Sevak
+ * arriving early for seva can pick.
+ */
 export function formatStayDate(iso: string, lang: Lang = "en") {
   const t = translator(lang)
   const dayIndex = (EVENT.days as readonly string[]).indexOf(iso)
   const suffix =
     dayIndex >= 0
       ? t("Day {n}", { n: dayIndex + 1 })
-      : iso < EVENT.days[0]
+      : iso === shiftDay(EVENT.days[0], -1)
         ? t("Day before")
-        : t("Day after")
-  return `${formatterFor(lang, "weekday").format(toLocalDate(iso))} ${formatDay(iso, lang)} · ${suffix}`
+        : iso === shiftDay(EVENT.days[EVENT.days.length - 1], 1)
+          ? t("Day after")
+          : ""
+  const date = `${formatterFor(lang, "weekday").format(toLocalDate(iso))} ${formatDay(iso, lang)}`
+  return suffix ? `${date} · ${suffix}` : date
 }
 
 /** "30 Jan – 1 Feb 2027", or "25 – 29 Dec 2026" within one month. */

@@ -235,6 +235,12 @@ export const GU: Record<string, string> = {
 
   // ------------------------------------------------------------ step 3
   "The event runs {first} to {last}.": "મહોત્સવ {first} થી {last} સુધી છે.",
+  "Arriving early for seva as a Swayam Sevak? (optional)":
+    "સ્વયંસેવક તરીકે સેવા માટે વહેલા આવો છો? (વૈકલ્પિક)",
+  "Tick to pick any day in January or February 2027 for arriving and leaving.":
+    "ટીક કરવાથી આગમન અને પ્રસ્થાન માટે જાન્યુઆરી કે ફેબ્રુઆરી 2027નો કોઈ પણ દિવસ પસંદ કરી શકાશે.",
+  Seva: "સેવા",
+  "Arriving early as a Swayam Sevak": "સ્વયંસેવક તરીકે વહેલા આવશે",
   "Everyone arrives and leaves together": "બધા સાથે જ આવશે અને સાથે જ જશે",
   "Untick if someone in the party comes later or leaves earlier.":
     "જો કોઈ મોડું આવે કે વહેલું જાય તો ટીક કાઢી નાખો.",

@@ -365,6 +365,11 @@ export function RegistrationDetail() {
               <div className="col-span-2">
                 <Detail label="Leaving">{formatStay(r.departure)}</Detail>
               </div>
+              {r.earlySeva && (
+                <div className="col-span-2">
+                  <Detail label="Seva">Arriving early as a Swayam Sevak</Detail>
+                </div>
+              )}
               <Detail label="Nights">
                 <span className="tabular-nums">
                   {nightsBetween(r.arrival, r.departure)}

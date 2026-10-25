@@ -10,13 +10,11 @@ import { Controller, get, useFormContext } from "react-hook-form"
 
 import { Button } from "@/components/ui/button"
 import { Checkbox, ChoiceGroup } from "@/components/ui/choice"
-import { TimePicker } from "@/components/ui/date-time"
+import { DatePicker, TimePicker } from "@/components/ui/date-time"
 import { DigitsInput, Field, Input } from "@/components/ui/input"
 import { NativeSelect } from "@/components/ui/select"
 import {
   EVENT,
-  ARRIVAL_DATES,
-  DEPARTURE_DATES,
   TIME_SLOTS,
   TRAIN_STATIONS,
   formatStayDate,
@@ -31,8 +29,10 @@ import { TravelModeIcon } from "../components"
 import { compareStay, isPresentOn, nightsBetween } from "../stay"
 import { TRAVEL_MODES, type TravelMode } from "../types"
 import {
+  arrivalDays,
   asksVehicleCount,
   comesByVehicle,
+  departureDays,
   fullNameOf,
   hasSplitDates,
   hasSplitTravel,
@@ -401,8 +401,11 @@ function TripQuestions({
 }
 
 /**
- * A date select and a time-slot select, side by side, and below them the
- * meal question when the slot has a meal.
+ * A day and a time-slot select, side by side, and below them the meal
+ * question when the slot has a meal. The day is a short list of the days
+ * around the event, or — for a Swayam Sevak arriving early for seva, who may
+ * pick any of the 59 days of January and February — a calendar, since a
+ * list that long runs off the screen.
  */
 function StayPicker({
   prefix,
@@ -417,34 +420,65 @@ function StayPicker({
   label: string
   error?: string
 }) {
-  const { register, watch, setValue } = useFormContext<RegistrationFormValues>()
+  const { control, register, watch, setValue } =
+    useFormContext<RegistrationFormValues>()
   const { t, lang } = useT()
   const dateName = `${prefix}Date` as const
   const slotName = `${prefix}Slot` as const
   const mealName = `${prefix}Meal` as const
   const meal = mealOf(watch(slotName))
+  const earlySeva = watch("earlySeva")
+  const leaving = prefix.endsWith("departure")
+  const days = (leaving ? departureDays : arrivalDays)(earlySeva)
+  // Leaving opens on the arrival day picked, and nothing before it can be
+  // picked; arriving opens on the event's first day.
+  const arrivalDate: string = watch(
+    leaving
+      ? (`${prefix.slice(0, -"departure".length)}arrivalDate` as `${typeof prefix}Date`)
+      : dateName
+  )
 
   return (
     <div className="flex flex-col gap-2">
       <Field label={label} required error={error}>
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
-          <NativeSelect
-            id={dateName}
-            aria-label={`${label} – ${t("Day")}`}
-            aria-invalid={!!error}
-            {...register(dateName)}
-          >
-            <option value="" disabled>
-              {t("Day")}
-            </option>
-            {(prefix.endsWith("arrival") ? ARRIVAL_DATES : DEPARTURE_DATES).map(
-              (date) => (
+          {earlySeva ? (
+            <Controller
+              control={control}
+              name={dateName}
+              render={({ field }) => (
+                <DatePicker
+                  id={dateName}
+                  aria-label={`${label} – ${t("Day")}`}
+                  value={field.value}
+                  onChange={field.onChange}
+                  invalid={!!error}
+                  placeholder={t("Day")}
+                  min={leaving && arrivalDate ? arrivalDate : days[0]}
+                  max={days[days.length - 1]}
+                  defaultMonth={(leaving && arrivalDate) || EVENT.days[0]}
+                  highlight={EVENT.days}
+                  highlightLabel={t("Event days")}
+                />
+              )}
+            />
+          ) : (
+            <NativeSelect
+              id={dateName}
+              aria-label={`${label} – ${t("Day")}`}
+              aria-invalid={!!error}
+              {...register(dateName)}
+            >
+              <option value="" disabled>
+                {t("Day")}
+              </option>
+              {days.map((date) => (
                 <option key={date} value={date}>
                   {formatStayDate(date, lang)}
                 </option>
-              )
-            )}
-          </NativeSelect>
+              ))}
+            </NativeSelect>
+          )}
           <NativeSelect
             id={slotName}
             aria-label={`${label} – ${t("Time")}`}
@@ -629,6 +663,29 @@ export function StayTravelStep() {
     })
   }
 
+  /**
+   * Unticking "arriving early for seva" takes away the days outside the
+   * event's: any already picked are emptied, so the select shows nothing
+   * rather than a day it no longer offers, and Continue asks for a new one.
+   */
+  const onEarlySevaChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    if (event.target.checked) return
+    const prefixes = [
+      "",
+      ...getValues("members").map((_, index) => `members.${index}.` as const),
+    ] as const
+    for (const prefix of prefixes) {
+      for (const [field, allowed] of [
+        ["arrivalDate", arrivalDays(false)],
+        ["departureDate", departureDays(false)],
+      ] as const) {
+        const name = `${prefix}${field}` as const
+        const value = getValues(name)
+        if (value && !allowed.includes(value)) setValue(name, "")
+      }
+    }
+  }
+
   const STAY_FIELDS = [
     "arrivalDate",
     "arrivalSlot",
@@ -781,6 +838,15 @@ export function StayTravelStep() {
             })}
           </p>
         </div>
+
+        <Checkbox
+          id="earlySeva"
+          label={t("Arriving early for seva as a Swayam Sevak? (optional)")}
+          description={t(
+            "Tick to pick any day in January or February 2027 for arriving and leaving."
+          )}
+          {...register("earlySeva", { onChange: onEarlySevaChange })}
+        />
 
         {/* Above the dates, so ticking it swaps what is below rather than moving itself. */}
         {members.length > 1 && (

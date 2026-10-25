@@ -122,6 +122,11 @@ export function describeChange(
   add("Mandal", before.mandal, after.mandal)
   add("Arrival", formatStay(before.arrival), formatStay(after.arrival))
   add("Departure", formatStay(before.departure), formatStay(after.departure))
+  add(
+    "Swayam Sevak, arriving early for seva",
+    yesNo(before.earlySeva),
+    yesNo(after.earlySeva)
+  )
 
   const t0 = before.travel
   const t1 = after.travel

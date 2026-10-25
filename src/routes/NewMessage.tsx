@@ -49,7 +49,7 @@ import {
   describeReport,
   filterValueLabel,
   readReport,
-  withFlightDays,
+  withDataDays,
   writeReport,
   type Person,
   type Report,
@@ -253,7 +253,7 @@ export function NewMessage() {
     [registrations.data]
   )
   const filters = React.useMemo(
-    () => withFlightDays(FILTERS, everyone),
+    () => withDataDays(FILTERS, everyone),
     [everyone]
   )
   const people = React.useMemo(

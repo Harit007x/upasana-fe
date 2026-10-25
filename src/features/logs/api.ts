@@ -24,6 +24,7 @@ export type RegistrationDetails = Pick<
   | "travel"
   | "indiaTravel"
   | "accommodationRequired"
+  | "earlySeva"
   | "notes"
 >
 

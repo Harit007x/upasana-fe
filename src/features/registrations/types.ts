@@ -201,6 +201,11 @@ export type Registration = {
   /** Only for devotees from abroad who filled it in. */
   indiaTravel?: IndiaTravel
   accommodationRequired: boolean
+  /**
+   * Arriving early for seva as a Swayam Sevak: the party's days may be any in
+   * January or February 2027 (SEVA_DATES), not only around the event.
+   */
+  earlySeva?: boolean
   notes?: string
   status: RegistrationStatus
   /** Who filled the form: the devotee themselves, or staff at the desk. */

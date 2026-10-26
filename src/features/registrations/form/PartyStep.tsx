@@ -8,8 +8,7 @@ import { useT } from "@/i18n/context"
 
 import type { RegistrationType } from "../types"
 import { useFormOptions } from "./form-options"
-import { IndiaTravelSection } from "./IndiaTravelSection"
-import { emptyMember, isOverseas, type RegistrationFormValues } from "./schema"
+import { emptyMember, type RegistrationFormValues } from "./schema"
 
 const TYPE_OPTIONS: {
   value: RegistrationType
@@ -42,7 +41,7 @@ export function PartyStep() {
     formState: { errors },
   } = useFormContext<RegistrationFormValues>()
   const { replace, append } = useFieldArray({ control, name: "members" })
-  const [type, stashed, mandal] = watch(["type", "stashedMembers", "mandal"])
+  const [type, stashed] = watch(["type", "stashedMembers"])
   const { lockedMandal } = useFormOptions()
   const { t } = useT()
 
@@ -162,11 +161,6 @@ export function PartyStep() {
           </Field>
         )}
       </div>
-
-      {/* From abroad: when they land in and leave India, asked right away. */}
-      {isOverseas({ mandal }) && (
-        <IndiaTravelSection alone={type === "individual"} />
-      )}
     </div>
   )
 }

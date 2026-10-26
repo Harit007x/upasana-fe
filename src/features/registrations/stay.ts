@@ -1,6 +1,7 @@
 import { EVENT, TIME_SLOTS, type TimeSlot } from "@/config/event"
 
 import type {
+  IndiaTravel,
   Member,
   PersonTravel,
   Registration,
@@ -60,6 +61,60 @@ export function wantsBed(
   return (
     registration.accommodationRequired && member.needsAccommodation !== false
   )
+}
+
+/**
+ * Whether the party lands in and flies out of India on different days, so
+ * each person has their own airport flights (`Member.indiaTravel`).
+ */
+export const hasOwnFlights = (registration: Pick<Registration, "members">) =>
+  registration.members.some((member) => !!member.indiaTravel)
+
+/**
+ * This person's Ahmedabad airport pickup and flight out: their own when the
+ * party's differ, else the party's. Never read `registration.indiaTravel`
+ * for a person directly — on a split party it carries no flights, only
+ * whether anyone needs a pickup.
+ */
+export function flightsOf(
+  registration: Pick<Registration, "members" | "indiaTravel">,
+  member: Pick<Member, "indiaTravel">
+) {
+  return hasOwnFlights(registration)
+    ? member.indiaTravel
+    : registration.indiaTravel
+}
+
+/**
+ * The registration's airport flights for a screen that shows them once:
+ * the party's, or — when they differ — each person's who has any, named.
+ */
+export function airportFlights(
+  registration: Pick<Registration, "members" | "indiaTravel">
+): { who?: string; flights: IndiaTravel }[] {
+  if (!hasOwnFlights(registration)) {
+    return registration.indiaTravel
+      ? [{ flights: registration.indiaTravel }]
+      : []
+  }
+  return registration.members.flatMap((member) =>
+    member.indiaTravel
+      ? [{ who: member.fullName, flights: member.indiaTravel }]
+      : []
+  )
+}
+
+/**
+ * Whether this person is arriving early for seva as a Swayam Sevak.
+ * `earlySeva` on the registration means "anyone in the party"; it was first
+ * asked once for the whole party, so where a person has no answer of their
+ * own (the server sends one for every registration now) it covers them.
+ */
+export function isSevak(
+  registration: Pick<Registration, "earlySeva">,
+  member: Pick<Member, "earlySeva">
+) {
+  return member.earlySeva ?? !!registration.earlySeva
 }
 
 /** "Yes", "No", or "2 of 4" when only some of the party asked for a bed. */

@@ -1,5 +1,5 @@
 import { Select } from "@base-ui/react/select"
-import { RiArrowDownSLine, RiCheckLine } from "@remixicon/react"
+import { RiArrowDownSLine, RiCheckLine, RiSearchLine } from "@remixicon/react"
 import { cn } from "cn"
 import * as React from "react"
 
@@ -28,7 +28,8 @@ const useTouch = () =>
  * regions, Rest of India, International).
  *
  * On a phone, the phone's own picker. With a mouse, a dropdown of a set height
- * that scrolls: the browser's own list of 44 mandals would fill the screen.
+ * that scrolls, with a search box on top that narrows the list as you type:
+ * the browser's own list of 44 mandals would fill the screen.
  *
  * `value` is "" while none is picked. `first` and `last` are offered before and
  * after the mandals; one with value "" stands for "none picked", like "Every
@@ -66,6 +67,18 @@ export function MandalSelect({
   "aria-label"?: string
 }) {
   const touch = useTouch()
+  const [query, setQuery] = React.useState("")
+  const search = query.trim().toLowerCase()
+  // Matches the name as shown and the English value, so "surat" finds Surat
+  // whatever language the list is in.
+  const matches = (mandal: Mandal) =>
+    !search ||
+    mandal.toLowerCase().includes(search) ||
+    translate(mandal).toLowerCase().includes(search)
+  const groups = MANDAL_GROUPS.map((group) => ({
+    label: group.label,
+    mandals: group.mandals.filter(matches),
+  })).filter((group) => group.mandals.length > 0)
   const labelOf = (mandal: Mandal) =>
     `${translate(mandal)}${note?.(mandal) ?? ""}`
 
@@ -130,6 +143,9 @@ export function MandalSelect({
         items={items}
         value={value || null}
         onValueChange={(next) => onChange((next as string | null) ?? "")}
+        onOpenChange={(open) => {
+          if (!open) setQuery("")
+        }}
         disabled={disabled}
       >
         <Select.Trigger
@@ -159,13 +175,49 @@ export function MandalSelect({
             className="z-50"
           >
             <Select.Popup className="flex max-h-[min(20rem,var(--available-height))] w-(--anchor-width) min-w-48 origin-(--transform-origin) flex-col rounded-lg border border-border bg-popover text-popover-foreground shadow-lg transition-[scale,opacity] duration-150 outline-none data-ending-style:scale-95 data-ending-style:opacity-0 data-starting-style:scale-95 data-starting-style:opacity-0">
+              <div className="flex items-center gap-2 border-b border-border px-2.5">
+                <RiSearchLine
+                  aria-hidden
+                  className="size-3.5 shrink-0 text-muted-foreground"
+                />
+                <input
+                  type="text"
+                  value={query}
+                  onChange={(event) => setQuery(event.target.value)}
+                  // The list's own keys (type-to-jump, Space to pick) would
+                  // swallow the typing; only arrows and Enter reach the list.
+                  onKeyDown={(event) => {
+                    if (
+                      ![
+                        "ArrowDown",
+                        "ArrowUp",
+                        "Enter",
+                        "Escape",
+                        "Tab",
+                      ].includes(event.key)
+                    ) {
+                      event.stopPropagation()
+                    }
+                  }}
+                  placeholder={translate("Search mandal")}
+                  aria-label={translate("Search mandal")}
+                  autoComplete="off"
+                  className="h-9 w-full min-w-0 bg-transparent text-sm outline-none placeholder:text-muted-foreground sm:h-8 sm:text-xs/relaxed"
+                />
+              </div>
               <Select.List className="min-h-0 overflow-y-auto overscroll-contain p-1">
-                {first.map((extra) => (
-                  <Item key={extra.value} value={extra.value || null}>
-                    {extra.label}
-                  </Item>
-                ))}
-                {MANDAL_GROUPS.map((group) => (
+                {groups.length === 0 && (
+                  <p className="px-2 py-3 text-center text-xs text-muted-foreground">
+                    {translate("No mandal matches")}
+                  </p>
+                )}
+                {!search &&
+                  first.map((extra) => (
+                    <Item key={extra.value} value={extra.value || null}>
+                      {extra.label}
+                    </Item>
+                  ))}
+                {groups.map((group) => (
                   <Select.Group key={group.label}>
                     <Select.GroupLabel className="px-2 pt-2 pb-1 text-3xs font-medium tracking-wider text-muted-foreground uppercase">
                       {translate(group.label)}
@@ -181,14 +233,15 @@ export function MandalSelect({
                     ))}
                   </Select.Group>
                 ))}
-                {last.length > 0 && (
+                {!search && last.length > 0 && (
                   <Select.Separator className="my-1 h-px bg-border" />
                 )}
-                {last.map((extra) => (
-                  <Item key={extra.value} value={extra.value || null}>
-                    {extra.label}
-                  </Item>
-                ))}
+                {!search &&
+                  last.map((extra) => (
+                    <Item key={extra.value} value={extra.value || null}>
+                      {extra.label}
+                    </Item>
+                  ))}
               </Select.List>
             </Select.Popup>
           </Select.Positioner>

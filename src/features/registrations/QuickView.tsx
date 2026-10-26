@@ -37,6 +37,7 @@ import {
 import { StatusActions } from "./StatusActions"
 import {
   accommodationSummary,
+  airportFlights,
   compareStay,
   travelOf,
   travelModesOf,
@@ -97,8 +98,12 @@ function shareText(r: Registration) {
     )
     if (own.needsDrop) lines.push(`Drop: ${who}${journeyHomeText(own)}`)
   }
-  if (r.indiaTravel?.needsPickup && r.indiaTravel.arrival)
-    lines.push(`Airport pickup: ${formatIndiaFlight(r.indiaTravel.arrival)}`)
+  for (const { who, flights } of airportFlights(r)) {
+    if (flights.needsPickup && flights.arrival)
+      lines.push(
+        `Airport pickup: ${who ? `${who}: ` : ""}${formatIndiaFlight(flights.arrival)}`
+      )
+  }
   const help = r.members.filter((m) => m.needsAssistance)
   if (help.length)
     lines.push(
@@ -234,16 +239,23 @@ function Details({ r }: { r: Registration }) {
               .join(" · ")}
           </Row>
         )}
-        {r.indiaTravel?.arrival && (
-          <Row label="Airport pickup">
-            {formatIndiaFlight(r.indiaTravel.arrival)}
-          </Row>
-        )}
-        {r.indiaTravel?.departure && (
-          <Row label="Flight out">
-            {formatIndiaFlight(r.indiaTravel.departure)}
-          </Row>
-        )}
+        {/* The party's flights, or each person's when they differ. */}
+        {airportFlights(r).map(({ who, flights }, index) => (
+          <React.Fragment key={index}>
+            {flights.arrival && (
+              <Row label="Airport pickup">
+                {who && `${who}: `}
+                {formatIndiaFlight(flights.arrival)}
+              </Row>
+            )}
+            {flights.departure && (
+              <Row label="Flight out">
+                {who && `${who}: `}
+                {formatIndiaFlight(flights.departure)}
+              </Row>
+            )}
+          </React.Fragment>
+        ))}
         <Row label="Accommodation">
           {beds === "Yes"
             ? "Needed"

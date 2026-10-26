@@ -122,11 +122,23 @@ export type Member = {
   /** Aged 40 or under: whether they will attend the Youth Convention. Absent when not answered. */
   attendsYouthConvention?: boolean
   /**
+   * Arriving early for seva as a Swayam Sevak: their days may be any in
+   * January or February 2027 (SEVA_DATES). Read it through `isSevak`
+   * (stay.ts), which falls back to the registration's party-wide answer.
+   */
+  earlySeva?: boolean
+  /**
    * How this person comes and goes, only when the party travels separately
    * (the registration's `travel.mode` is "separate"). Read it through
    * `travelOf`, which falls back to the party's.
    */
   travel?: PersonTravel
+  /**
+   * From abroad, when the party does not all land and fly out on the same
+   * days: this person's Ahmedabad airport pickup and flight out. Read it
+   * through `flightsOf` (stay.ts), which gives the party's when they share.
+   */
+  indiaTravel?: IndiaTravel
 }
 
 export type Travel = {
@@ -198,12 +210,17 @@ export type Registration = {
   arrival: StayPoint
   departure: StayPoint
   travel: Travel
-  /** Only for devotees from abroad who filled it in. */
+  /**
+   * Only for devotees from abroad who filled it in. When the party does not
+   * all land and fly out on the same days, this only says whether anyone
+   * needs a pickup, and each person's flights are on them: read a person's
+   * through `flightsOf` (stay.ts).
+   */
   indiaTravel?: IndiaTravel
   accommodationRequired: boolean
   /**
-   * Arriving early for seva as a Swayam Sevak: the party's days may be any in
-   * January or February 2027 (SEVA_DATES), not only around the event.
+   * Anyone in the party is arriving early for seva as a Swayam Sevak; each
+   * person's own answer is `Member.earlySeva` (read it with `isSevak`).
    */
   earlySeva?: boolean
   notes?: string

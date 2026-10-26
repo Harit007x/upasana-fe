@@ -93,11 +93,13 @@ export function useToggleSampleData() {
   })
 }
 
+/** The WhatsApp confirmation goes in the language the form is shown in (English at the desk). */
 export function useCreateRegistration() {
   const queryClient = useQueryClient()
+  const { lang } = useT()
   return useMutation({
     mutationFn: (input: NewRegistration) =>
-      api.post<Registration>("/registrations", input),
+      api.post<Registration>("/registrations", { ...input, lang }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: keys.all }),
   })
 }

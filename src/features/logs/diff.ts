@@ -4,7 +4,12 @@ import {
   formatStay,
   journeyHomeText,
 } from "@/features/registrations/format"
-import { wantsBed } from "@/features/registrations/stay"
+import {
+  flightsOf,
+  hasOwnFlights,
+  isSevak,
+  wantsBed,
+} from "@/features/registrations/stay"
 import {
   GENDERS,
   REGISTRATION_TYPES,
@@ -96,9 +101,32 @@ function memberLines(
       yesNo(wantsBed(beds.before, before)),
       yesNo(wantsBed(beds.after, after)),
     ],
+    [
+      "Swayam Sevak, arriving early for seva",
+      yesNo(isSevak(beds.before, before)),
+      yesNo(isSevak(beds.after, after)),
+    ],
     // Only while the party travels separately; otherwise the party's travel says it.
     ["Travel", ownTravel(before.travel), ownTravel(after.travel)],
   ]
+  // Airport flights per person once either side has them per person; while
+  // the party shares them, describeChange says it once for everyone.
+  if (hasOwnFlights(beds.before) || hasOwnFlights(beds.after)) {
+    const i0 = flightsOf(beds.before, before)
+    const i1 = flightsOf(beds.after, after)
+    fields.push(
+      [
+        "Ahmedabad airport pickup",
+        airport(i0?.needsPickup, i0?.arrival),
+        airport(i1?.needsPickup, i1?.arrival),
+      ],
+      [
+        "Flight out of Ahmedabad",
+        orDash(i0?.departure && formatIndiaFlight(i0.departure)),
+        orDash(i1?.departure && formatIndiaFlight(i1.departure)),
+      ]
+    )
+  }
   return fields
     .filter(([, a, b]) => a !== b)
     .map(([field, a, b]) => ({
@@ -122,11 +150,6 @@ export function describeChange(
   add("Mandal", before.mandal, after.mandal)
   add("Arrival", formatStay(before.arrival), formatStay(after.arrival))
   add("Departure", formatStay(before.departure), formatStay(after.departure))
-  add(
-    "Swayam Sevak, arriving early for seva",
-    yesNo(before.earlySeva),
-    yesNo(after.earlySeva)
-  )
 
   const t0 = before.travel
   const t1 = after.travel
@@ -168,18 +191,21 @@ export function describeChange(
   )
   add("Drop to station or airport", yesNo(t0.needsDrop), yesNo(t1.needsDrop))
 
-  const i0 = before.indiaTravel
-  const i1 = after.indiaTravel
-  add(
-    "Ahmedabad airport pickup",
-    airport(i0?.needsPickup, i0?.arrival),
-    airport(i1?.needsPickup, i1?.arrival)
-  )
-  add(
-    "Flight out of Ahmedabad",
-    orDash(i0?.departure && formatIndiaFlight(i0.departure)),
-    orDash(i1?.departure && formatIndiaFlight(i1.departure))
-  )
+  // The party's flights, while it shares them; each person's are in memberLines.
+  if (!hasOwnFlights(before) && !hasOwnFlights(after)) {
+    const i0 = before.indiaTravel
+    const i1 = after.indiaTravel
+    add(
+      "Ahmedabad airport pickup",
+      airport(i0?.needsPickup, i0?.arrival),
+      airport(i1?.needsPickup, i1?.arrival)
+    )
+    add(
+      "Flight out of Ahmedabad",
+      orDash(i0?.departure && formatIndiaFlight(i0.departure)),
+      orDash(i1?.departure && formatIndiaFlight(i1.departure))
+    )
+  }
 
   // People, matched on their id, which edits keep.
   const was = new Map(before.members.map((m) => [m.id, m]))

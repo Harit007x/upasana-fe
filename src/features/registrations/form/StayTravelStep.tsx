@@ -29,8 +29,10 @@ import { TravelModeIcon } from "../components"
 import { compareStay, isPresentOn, nightsBetween } from "../stay"
 import { TRAVEL_MODES, type TravelMode } from "../types"
 import {
+  anySevak,
   arrivalDays,
   asksVehicleCount,
+  everyoneSevak,
   comesByVehicle,
   departureDays,
   fullNameOf,
@@ -427,7 +429,14 @@ function StayPicker({
   const slotName = `${prefix}Slot` as const
   const mealName = `${prefix}Meal` as const
   const meal = mealOf(watch(slotName))
-  const earlySeva = watch("earlySeva")
+  // A person's picker follows their own answer; the party's shared one opens
+  // the seva days only when everyone on it is a Swayam Sevak.
+  const person = /^members\.(\d+)\./.exec(prefix)?.[1]
+  const members = watch("members")
+  const earlySeva =
+    person === undefined
+      ? everyoneSevak({ members })
+      : !!members[Number(person)]?.earlySeva
   const leaving = prefix.endsWith("departure")
   const days = (leaving ? departureDays : arrivalDays)(earlySeva)
   // Leaving opens on the arrival day picked, and nothing before it can be
@@ -636,8 +645,22 @@ export function StayTravelStep() {
 
   /**
    * Splitting starts every person on the party's dates, so only the
-   * exceptions need editing. Going back to one set of dates starts it from the
-   * first person's, so nothing typed is lost.
+   * exceptions need editing.
+   */
+  const startOwnDates = () =>
+    getValues("members").forEach((member, index) => {
+      if (member.arrivalDate) return
+      setValue(`members.${index}.arrivalDate`, getValues("arrivalDate"))
+      setValue(`members.${index}.arrivalSlot`, getValues("arrivalSlot"))
+      setValue(`members.${index}.departureDate`, getValues("departureDate"))
+      setValue(`members.${index}.departureSlot`, getValues("departureSlot"))
+      setValue(`members.${index}.arrivalMeal`, getValues("arrivalMeal"))
+      setValue(`members.${index}.departureMeal`, getValues("departureMeal"))
+    })
+
+  /**
+   * Going back to one set of dates starts it from the first person's, so
+   * nothing typed is lost.
    */
   const onSameScheduleChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     if (event.target.checked) {
@@ -652,28 +675,35 @@ export function StayTravelStep() {
       }
       return
     }
-    getValues("members").forEach((member, index) => {
-      if (member.arrivalDate) return
-      setValue(`members.${index}.arrivalDate`, getValues("arrivalDate"))
-      setValue(`members.${index}.arrivalSlot`, getValues("arrivalSlot"))
-      setValue(`members.${index}.departureDate`, getValues("departureDate"))
-      setValue(`members.${index}.departureSlot`, getValues("departureSlot"))
-      setValue(`members.${index}.arrivalMeal`, getValues("arrivalMeal"))
-      setValue(`members.${index}.departureMeal`, getValues("departureMeal"))
-    })
+    startOwnDates()
   }
 
   /**
-   * Unticking "arriving early for seva" takes away the days outside the
-   * event's: any already picked are emptied, so the select shows nothing
-   * rather than a day it no longer offers, and Continue asks for a new one.
+   * Ticking someone in a party as a Swayam Sevak gives everyone their own
+   * dates — "everyone arrives and leaves together" is unticked and hidden —
+   * starting from the party's, so only the sevak's need changing.
+   *
+   * Unticking someone takes away the days outside the event's — from their
+   * own dates, and from the party's shared ones, which keep them only while
+   * everyone is a Swayam Sevak. Any already picked are emptied, so the picker
+   * shows nothing rather than a day it no longer offers, and Continue asks for
+   * a new one.
    */
   const onEarlySevaChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    if (event.target.checked) return
-    const prefixes = [
-      "",
-      ...getValues("members").map((_, index) => `members.${index}.` as const),
-    ] as const
+    if (event.target.checked) {
+      if (getValues("members").length > 1 && getValues("sameSchedule")) {
+        startOwnDates()
+        setValue("sameSchedule", false)
+      }
+      return
+    }
+    const current = getValues("members")
+    const prefixes: ("" | `members.${number}.`)[] = [
+      ...(everyoneSevak({ members: current }) ? [] : ["" as const]),
+      ...current.flatMap((member, index) =>
+        member.earlySeva ? [] : [`members.${index}.` as const]
+      ),
+    ]
     for (const prefix of prefixes) {
       for (const [field, allowed] of [
         ["arrivalDate", arrivalDays(false)],
@@ -839,17 +869,50 @@ export function StayTravelStep() {
           </p>
         </div>
 
-        <Checkbox
-          id="earlySeva"
-          label={t("Arriving early for seva as a Swayam Sevak? (optional)")}
-          description={t(
-            "Tick to pick any day in January or February 2027 for arriving and leaving."
-          )}
-          {...register("earlySeva", { onChange: onEarlySevaChange })}
-        />
+        {/* Asked of each person: in a family, some may come early for seva
+            and the rest only for the event. */}
+        {party ? (
+          <div className="flex flex-col gap-3 rounded-lg border border-border p-4">
+            <div className="flex flex-col gap-0.5">
+              <p className="text-xs/relaxed font-medium">
+                {t(
+                  "Anyone arriving early for seva as a Swayam Sevak? (optional)"
+                )}
+              </p>
+              <p className="text-2xs/relaxed text-muted-foreground">
+                {t(
+                  "Tick each person who is. They can pick any day in January or February 2027 for arriving and leaving."
+                )}
+              </p>
+            </div>
+            {members.map((member, index) => (
+              <Checkbox
+                key={index}
+                id={`members.${index}.earlySeva`}
+                label={fullNameOf(member) || t("Person {n}", { n: index + 1 })}
+                {...register(`members.${index}.earlySeva`, {
+                  onChange: onEarlySevaChange,
+                })}
+              />
+            ))}
+          </div>
+        ) : (
+          <Checkbox
+            id="members.0.earlySeva"
+            label={t("Arriving early for seva as a Swayam Sevak? (optional)")}
+            description={t(
+              "Tick to pick any day in January or February 2027 for arriving and leaving."
+            )}
+            {...register("members.0.earlySeva", {
+              onChange: onEarlySevaChange,
+            })}
+          />
+        )}
 
-        {/* Above the dates, so ticking it swaps what is below rather than moving itself. */}
-        {members.length > 1 && (
+        {/* Above the dates, so ticking it swaps what is below rather than
+            moving itself. Not offered once anyone is a Swayam Sevak: their
+            days differ from the rest, so each person gives their own. */}
+        {members.length > 1 && !anySevak({ members }) && (
           <Checkbox
             id="sameSchedule"
             label={t("Everyone arrives and leaves together")}

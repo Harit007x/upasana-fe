@@ -31,6 +31,8 @@ import { SampleDataToggle } from "@/features/registrations/SampleDataToggle"
 import {
   travelModesOf,
   travelOf,
+  flightsOf,
+  isSevak,
   wantsBed,
 } from "@/features/registrations/stay"
 import { isAdmin, useSession } from "@/lib/auth-client"
@@ -106,51 +108,51 @@ function downloadCsv(registrations: Registration[]) {
     r.members.map((m) => {
       // Their own way here when the party travels separately; vehicles are the party's.
       const travel = travelOf(r, m)
+      // Their own airport flights when the party's differ.
+      const flights = flightsOf(r, m)
       return [
-      m.code ?? "",
-      r.type === "family" ? r.code : "",
-      REGISTRATION_STATUSES[r.status],
-      REGISTRATION_TYPES[r.type],
-      r.groupName ?? "",
-      r.mandal,
-      m.fullName,
-      GENDERS[m.gender],
-      m.age,
-      m.mobile ? formatMobile(m.mobile) : "",
-      m.isPrimary ? "Primary contact" : (m.relation ?? ""),
-      m.arrival.date,
-      m.arrival.slot,
-      formatMeal(m.arrival),
-      m.departure.date,
-      m.departure.slot,
-      formatMeal(m.departure),
-      r.earlySeva ? "Yes" : "",
-      TRAVEL_MODES[travel.mode],
-      (r.travel.vehicleNumbers ?? []).join("; "),
-      travel.station ?? "",
-      travel.arrivalTime ? formatTime(travel.arrivalTime) : "",
-      travel.needsPickup ? "Yes" : "",
-      travel.needsDrop ? "Yes" : "",
-      travel.departureMode ? TRAVEL_MODES[travel.departureMode] : "",
-      travel.departureReference ?? "",
-      travel.departureStation ?? "",
-      travel.departureTime ? formatTime(travel.departureTime) : "",
-      r.indiaTravel?.arrival ? formatIndiaFlight(r.indiaTravel.arrival) : "",
-      r.indiaTravel?.departure
-        ? formatIndiaFlight(r.indiaTravel.departure)
-        : "",
-      wantsBed(r, m) ? "Yes" : "No",
-      m.needsAssistance ? (m.assistanceNote ?? "Yes") : "",
-      m.attendsYouthConvention == null
-        ? ""
-        : m.attendsYouthConvention
-          ? "Yes"
-          : "No",
-      r.mobileVerification === "otp"
-        ? "OTP"
-        : r.mobileVerification === "in_person"
-          ? `In person (${r.verifiedByName ?? ""})`
-          : "",
+        m.code ?? "",
+        r.type === "family" ? r.code : "",
+        REGISTRATION_STATUSES[r.status],
+        REGISTRATION_TYPES[r.type],
+        r.groupName ?? "",
+        r.mandal,
+        m.fullName,
+        GENDERS[m.gender],
+        m.age,
+        m.mobile ? formatMobile(m.mobile) : "",
+        m.isPrimary ? "Primary contact" : (m.relation ?? ""),
+        m.arrival.date,
+        m.arrival.slot,
+        formatMeal(m.arrival),
+        m.departure.date,
+        m.departure.slot,
+        formatMeal(m.departure),
+        isSevak(r, m) ? "Yes" : "",
+        TRAVEL_MODES[travel.mode],
+        (r.travel.vehicleNumbers ?? []).join("; "),
+        travel.station ?? "",
+        travel.arrivalTime ? formatTime(travel.arrivalTime) : "",
+        travel.needsPickup ? "Yes" : "",
+        travel.needsDrop ? "Yes" : "",
+        travel.departureMode ? TRAVEL_MODES[travel.departureMode] : "",
+        travel.departureReference ?? "",
+        travel.departureStation ?? "",
+        travel.departureTime ? formatTime(travel.departureTime) : "",
+        flights?.arrival ? formatIndiaFlight(flights.arrival) : "",
+        flights?.departure ? formatIndiaFlight(flights.departure) : "",
+        wantsBed(r, m) ? "Yes" : "No",
+        m.needsAssistance ? (m.assistanceNote ?? "Yes") : "",
+        m.attendsYouthConvention == null
+          ? ""
+          : m.attendsYouthConvention
+            ? "Yes"
+            : "No",
+        r.mobileVerification === "otp"
+          ? "OTP"
+          : r.mobileVerification === "in_person"
+            ? `In person (${r.verifiedByName ?? ""})`
+            : "",
       ]
     })
   )

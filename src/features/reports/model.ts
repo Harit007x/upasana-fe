@@ -18,6 +18,9 @@ import {
 import {
   isPresentOn,
   travelOf,
+  flightsOf,
+  hasOwnFlights,
+  isSevak,
   wantsBed,
 } from "@/features/registrations/stay"
 import {
@@ -361,7 +364,8 @@ export const FILTERS: FilterDef[] = [
     label: "Swayam Sevak (early seva)",
     group: "who",
     options: YES_NO,
-    test: ({ registration }, v) => flag(!!registration.earlySeva, v),
+    test: ({ registration, member }, v) =>
+      flag(isSevak(registration, member), v),
   },
 
   // When
@@ -468,16 +472,16 @@ export const FILTERS: FilterDef[] = [
     label: "Airport pickup (NRI)",
     group: "travel",
     options: YES_NO,
-    test: ({ registration }, v) =>
-      flag(!!registration.indiaTravel?.needsPickup, v),
+    test: ({ registration, member }, v) =>
+      flag(!!flightsOf(registration, member)?.needsPickup, v),
   },
   {
     key: "flightDay",
     label: "Landing on",
     group: "travel",
     options: [],
-    test: ({ registration }, v) =>
-      registration.indiaTravel?.arrival?.date === v,
+    test: ({ registration, member }, v) =>
+      flightsOf(registration, member)?.arrival?.date === v,
     free: { accepts: (v) => /^\d{4}-\d{2}-\d{2}$/.test(v), label: formatDay },
   },
 
@@ -511,7 +515,7 @@ export function withDataDays(filters: FilterDef[], people: Person[]) {
       .sort()
       .map((d): Option => [d, formatDay(d)])
   const landing = daysOf(
-    people.map((p) => p.registration.indiaTravel?.arrival?.date)
+    people.map((p) => flightsOf(p.registration, p.member)?.arrival?.date)
   )
   const arriving = daysOf([
     ...EVENT.days,
@@ -610,7 +614,7 @@ export const DIMENSIONS = {
   },
   flightDay: {
     label: "Landing on (NRI)",
-    of: (p) => daySort(p.registration.indiaTravel?.arrival?.date),
+    of: (p) => daySort(flightsOf(p.registration, p.member)?.arrival?.date),
   },
   bed: {
     label: "Accommodation",
@@ -633,7 +637,7 @@ export const DIMENSIONS = {
   },
   seva: {
     label: "Swayam Sevak (early seva)",
-    of: (p) => ({ label: p.registration.earlySeva ? "Yes" : "No" }),
+    of: (p) => ({ label: isSevak(p.registration, p.member) ? "Yes" : "No" }),
   },
 } satisfies Record<string, DimensionDef>
 export type Dimension = keyof typeof DIMENSIONS
@@ -846,23 +850,39 @@ export const COLUMNS = {
         .join(" · ")
     },
   },
+  // Each person's airport flights; one row per registration says "Per person"
+  // when the party's differ.
   airportPickup: {
     label: "Airport pickup",
-    value: (p) => (p.registration.indiaTravel?.needsPickup ? "Yes" : ""),
+    value: (p) =>
+      flightsOf(p.registration, p.member)?.needsPickup ? "Yes" : "",
+    booking: (r) => (r.indiaTravel?.needsPickup ? "Yes" : ""),
   },
   flightIn: {
     label: "Flight in",
-    value: (p) =>
-      p.registration.indiaTravel?.arrival
-        ? formatIndiaFlight(p.registration.indiaTravel.arrival)
-        : "",
+    value: (p) => {
+      const arrival = flightsOf(p.registration, p.member)?.arrival
+      return arrival ? formatIndiaFlight(arrival) : ""
+    },
+    booking: (r) =>
+      hasOwnFlights(r)
+        ? "Per person"
+        : r.indiaTravel?.arrival
+          ? formatIndiaFlight(r.indiaTravel.arrival)
+          : "",
   },
   flightOut: {
     label: "Flight out",
-    value: (p) =>
-      p.registration.indiaTravel?.departure
-        ? formatIndiaFlight(p.registration.indiaTravel.departure)
-        : "",
+    value: (p) => {
+      const departure = flightsOf(p.registration, p.member)?.departure
+      return departure ? formatIndiaFlight(departure) : ""
+    },
+    booking: (r) =>
+      hasOwnFlights(r)
+        ? "Per person"
+        : r.indiaTravel?.departure
+          ? formatIndiaFlight(r.indiaTravel.departure)
+          : "",
   },
   bed: {
     label: "Accommodation",
@@ -882,7 +902,8 @@ export const COLUMNS = {
   },
   seva: {
     label: "Swayam Sevak (early seva)",
-    value: (p) => (p.registration.earlySeva ? "Yes" : "No"),
+    person: true,
+    value: (p) => (isSevak(p.registration, p.member) ? "Yes" : "No"),
   },
   notes: { label: "Notes", value: (p) => p.registration.notes ?? "" },
 } satisfies Record<string, ColumnDef>

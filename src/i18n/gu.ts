@@ -153,6 +153,14 @@ export const GU: Record<string, string> = {
     "મારે અમદાવાદ એરપોર્ટથી પિકઅપની જરૂર છે",
   "We need a pickup from Ahmedabad airport":
     "અમારે અમદાવાદ એરપોર્ટથી પિકઅપની જરૂર છે",
+  "Everyone lands in and flies out of India on the same days":
+    "બધા એક જ દિવસે ભારત આવશે અને એક જ દિવસે પરત જશે",
+  "Untick if some of you land earlier or fly out on another day.":
+    "જો કોઈ વહેલા આવે કે બીજા દિવસે પરત જાય તો ટીક કાઢી નાખો.",
+  "{name} needs a pickup from Ahmedabad airport":
+    "{name} ને અમદાવાદ એરપોર્ટથી પિકઅપની જરૂર છે",
+  "Clear {name}'s flights": "{name} ની ફ્લાઇટની વિગત ભૂંસો",
+  "Copy {name}'s flights": "{name} ની ફ્લાઇટની વિગત અહીં ભરો",
   "The transport team meets you at arrivals.":
     "ટ્રાન્સપોર્ટ ટીમ તમને એરપોર્ટના આગમન દ્વાર પર મળશે.",
 
@@ -240,7 +248,14 @@ export const GU: Record<string, string> = {
   "Tick to pick any day in January or February 2027 for arriving and leaving.":
     "ટીક કરવાથી આગમન અને પ્રસ્થાન માટે જાન્યુઆરી કે ફેબ્રુઆરી 2027નો કોઈ પણ દિવસ પસંદ કરી શકાશે.",
   Seva: "સેવા",
+  "Search mandal": "મંડળ શોધો",
+  "No mandal matches": "કોઈ મંડળ મળ્યું નહીં",
   "Arriving early as a Swayam Sevak": "સ્વયંસેવક તરીકે વહેલા આવશે",
+  "Anyone arriving early for seva as a Swayam Sevak? (optional)":
+    "કોઈ સ્વયંસેવક તરીકે સેવા માટે વહેલા આવે છે? (વૈકલ્પિક)",
+  "Tick each person who is. They can pick any day in January or February 2027 for arriving and leaving.":
+    "જે આવે છે તે દરેક વ્યક્તિને ટીક કરો. તેઓ આગમન અને પ્રસ્થાન માટે જાન્યુઆરી કે ફેબ્રુઆરી 2027નો કોઈ પણ દિવસ પસંદ કરી શકશે.",
+  "{names}: arriving early as Swayam Sevaks": "{names}: સ્વયંસેવક તરીકે વહેલા આવશે",
   "Everyone arrives and leaves together": "બધા સાથે જ આવશે અને સાથે જ જશે",
   "Untick if someone in the party comes later or leaves earlier.":
     "જો કોઈ મોડું આવે કે વહેલું જાય તો ટીક કાઢી નાખો.",

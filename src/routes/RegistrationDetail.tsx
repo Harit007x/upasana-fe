@@ -38,7 +38,9 @@ import {
   accommodationSummary,
   compareStay,
   eventDaysCovered,
+  airportFlights,
   hasSplitSchedule,
+  isSevak,
   nightsBetween,
   wantsBed,
 } from "@/features/registrations/stay"
@@ -282,6 +284,9 @@ export function RegistrationDetail() {
                     {someWantBeds && wantsBed(r, m) && (
                       <Badge variant="outline">Needs a bed</Badge>
                     )}
+                    {isSevak(r, m) && (
+                      <Badge variant="info">Swayam Sevak · early seva</Badge>
+                    )}
                   </div>
                   <div className="flex flex-wrap items-center gap-x-1.5 text-2xs/relaxed text-muted-foreground tabular-nums">
                     <span>{GENDERS[m.gender]}</span>
@@ -365,11 +370,6 @@ export function RegistrationDetail() {
               <div className="col-span-2">
                 <Detail label="Leaving">{formatStay(r.departure)}</Detail>
               </div>
-              {r.earlySeva && (
-                <div className="col-span-2">
-                  <Detail label="Seva">Arriving early as a Swayam Sevak</Detail>
-                </div>
-              )}
               <Detail label="Nights">
                 <span className="tabular-nums">
                   {nightsBetween(r.arrival, r.departure)}
@@ -479,25 +479,33 @@ export function RegistrationDetail() {
             </dl>
           </Card>
 
-          {r.indiaTravel && (
+          {/* The party's flights, or each person's when they differ. */}
+          {airportFlights(r).length > 0 && (
             <Card className="gap-3">
               <CardTitle>Ahmedabad airport</CardTitle>
-              <dl className="grid grid-cols-2 gap-3">
-                <div className="col-span-2">
-                  <Detail label="Pickup when landing">
-                    {r.indiaTravel.arrival
-                      ? formatIndiaFlight(r.indiaTravel.arrival)
-                      : "Not needed"}
-                  </Detail>
-                </div>
-                <div className="col-span-2">
-                  <Detail label="Flight out">
-                    {r.indiaTravel.departure
-                      ? formatIndiaFlight(r.indiaTravel.departure)
-                      : "Not given"}
-                  </Detail>
-                </div>
-              </dl>
+              {airportFlights(r).map(({ who, flights }, index) => (
+                <dl key={index} className="grid grid-cols-2 gap-3">
+                  {who && (
+                    <p className="col-span-2 text-xs/relaxed font-medium">
+                      {who}
+                    </p>
+                  )}
+                  <div className="col-span-2">
+                    <Detail label="Pickup when landing">
+                      {flights.arrival
+                        ? formatIndiaFlight(flights.arrival)
+                        : "Not needed"}
+                    </Detail>
+                  </div>
+                  <div className="col-span-2">
+                    <Detail label="Flight out">
+                      {flights.departure
+                        ? formatIndiaFlight(flights.departure)
+                        : "Not given"}
+                    </Detail>
+                  </div>
+                </dl>
+              ))}
             </Card>
           )}
 

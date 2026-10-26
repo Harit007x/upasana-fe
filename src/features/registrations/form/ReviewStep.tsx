@@ -22,12 +22,14 @@ import {
   comesByVehicle,
   hasSplitDates,
   hasSplitTravel,
+  hasSplitFlights,
   indiaTravelOf,
   bedsWanted,
   needsAccommodation,
   offersPickup,
   asksYouthConvention,
   vehicleSlots,
+  type MemberFormValues,
   type RegistrationFormValues,
   type TripValues,
 } from "./schema"
@@ -133,11 +135,23 @@ export function ReviewStep({
   const { t, lang } = useT()
   const values = getValues()
   const beds = bedsWanted(values)
-  const india = indiaTravelOf(values)
+  // From abroad: the party's airport flights, or each person's.
+  const splitFlights = hasSplitFlights(values)
+  const india = splitFlights ? undefined : indiaTravelOf(values)
+  const ownFlights = (member: MemberFormValues) =>
+    indiaTravelOf({ ...member, mandal: values.mandal })
   const local = isLocalMandal(values.mandal)
   const splitDates = hasSplitDates(values)
   const splitTravel = hasSplitTravel(values)
   const vehicleCount = vehicleSlots(values)
+  // Who is arriving early for seva as a Swayam Sevak, by name.
+  const sevaks = values.members
+    .map((member, index) =>
+      member.earlySeva
+        ? fullNameOf(member) || t("Person {n}", { n: index + 1 })
+        : ""
+    )
+    .filter(Boolean)
   const vehicleNumbers = values.vehicleNumbers
     .slice(0, vehicleCount)
     .map((number) => (number ?? "").trim().toUpperCase())
@@ -168,16 +182,6 @@ export function ReviewStep({
             <Row label={t("Name")}>{values.groupName}</Row>
           )}
           <Row label={t("Satsang mandal")}>{t(values.mandal)}</Row>
-          {india?.arrival && (
-            <Row label={t("Airport pickup")}>
-              {formatIndiaFlight(india.arrival, lang)}
-            </Row>
-          )}
-          {india?.departure && (
-            <Row label={t("Flight out")}>
-              {formatIndiaFlight(india.departure, lang)}
-            </Row>
-          )}
         </dl>
       </section>
 
@@ -225,9 +229,47 @@ export function ReviewStep({
                   values.verifiedInPerson &&
                   ` · ${t("verified in person")}`}
               </span>
+              {splitFlights &&
+                (() => {
+                  const own = ownFlights(member)
+                  return (
+                    <>
+                      {own?.arrival && (
+                        <span className="text-2xs/relaxed">
+                          <span className="text-muted-foreground">
+                            {t("Airport pickup")}:
+                          </span>{" "}
+                          {formatIndiaFlight(own.arrival, lang)}
+                        </span>
+                      )}
+                      {own?.departure && (
+                        <span className="text-2xs/relaxed">
+                          <span className="text-muted-foreground">
+                            {t("Flight out")}:
+                          </span>{" "}
+                          {formatIndiaFlight(own.departure, lang)}
+                        </span>
+                      )}
+                    </>
+                  )
+                })()}
             </li>
           ))}
         </ul>
+        {(india?.arrival || india?.departure) && (
+          <dl className="divide-y divide-border">
+            {india.arrival && (
+              <Row label={t("Airport pickup")}>
+                {formatIndiaFlight(india.arrival, lang)}
+              </Row>
+            )}
+            {india.departure && (
+              <Row label={t("Flight out")}>
+                {formatIndiaFlight(india.departure, lang)}
+              </Row>
+            )}
+          </dl>
+        )}
       </section>
 
       <section className="flex flex-col">
@@ -240,9 +282,13 @@ export function ReviewStep({
           {editButton(2)}
         </div>
         <dl className="divide-y divide-border">
-          {values.earlySeva && (
+          {sevaks.length > 0 && (
             <Row label={t("Seva")}>
-              {t("Arriving early as a Swayam Sevak")}
+              {values.members.length === 1
+                ? t("Arriving early as a Swayam Sevak")
+                : t("{names}: arriving early as Swayam Sevaks", {
+                    names: sevaks.join(", "),
+                  })}
             </Row>
           )}
           {/* What the whole party shares first, then each person's own. */}

@@ -607,6 +607,13 @@ function registrationDetail(r: Registration) {
         : {}),
       // Travelling separately: this person's own way here and home.
       ...(m.travel ? { travel: tripDetail(m.travel) } : {}),
+      // Landing and flying out on other days than the rest of the party.
+      ...(m.indiaTravel?.needsPickup && m.indiaTravel.arrival
+        ? { airport_pickup: formatIndiaFlight(m.indiaTravel.arrival) }
+        : {}),
+      ...(m.indiaTravel?.departure
+        ? { flight_out: formatIndiaFlight(m.indiaTravel.departure) }
+        : {}),
     })),
     travel: {
       ...tripDetail(t),

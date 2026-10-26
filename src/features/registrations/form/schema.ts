@@ -24,7 +24,13 @@ import {
   toE164,
 } from "@/lib/phone"
 
-import { compareStay, hasSplitSchedule, wantsBed } from "../stay"
+import {
+  compareStay,
+  hasOwnFlights,
+  hasSplitSchedule,
+  isSevak,
+  wantsBed,
+} from "../stay"
 import {
   GENDERS,
   RELATION_GENDER,
@@ -118,6 +124,16 @@ export const arrivalDays = (earlySeva: boolean) =>
   earlySeva ? SEVA_DATES : ARRIVAL_DATE_VALUES
 export const departureDays = (earlySeva: boolean) =>
   earlySeva ? SEVA_DATES : DEPARTURE_DATE_VALUES
+
+/**
+ * Whether everyone in the party is arriving early for seva: the party's
+ * shared dates can leave the event's days only then. In practice that is
+ * someone registering alone — a party with any Swayam Sevak always gives each
+ * person's own dates (`hasSplitDates`).
+ */
+export const everyoneSevak = (values: {
+  members: readonly { earlySeva?: boolean }[]
+}) => values.members.length > 0 && values.members.every((m) => !!m.earlySeva)
 const SLOT_VALUES = Object.keys(TIME_SLOTS)
 
 /** One part of a name, in English letters (see hasNonLatinLetters). Required unless `missing` is not given. */
@@ -187,8 +203,43 @@ const tripFields = {
   dropTime: z.string(),
 }
 
+/**
+ * From abroad (see `isOverseas`): a pickup from Ahmedabad airport, optional,
+ * and the flight out, for the record only — no drop is arranged. A flight is
+ * its day, time and number; the day is needed once the pickup is ticked or
+ * anything about the flight out is given. A date is "YYYY-MM-DD" and a time
+ * "HH:MM". The landing flight is kept but not sent while unticked. Asked once
+ * for the party, or for each person when they land and fly out on different
+ * days (`hasSplitFlights`) — the same names on both, so one set of rules
+ * checks each.
+ */
+const flightFields = {
+  indiaNeedsPickup: z.boolean(),
+  indiaArrivalDate: z.string(),
+  indiaArrivalTime: z.string(),
+  indiaArrivalFlight: z.string(),
+  indiaDepartureDate: z.string(),
+  indiaDepartureTime: z.string(),
+  indiaDepartureFlight: z.string(),
+}
+export type FlightValues = {
+  [K in keyof typeof flightFields]: z.infer<(typeof flightFields)[K]>
+}
+export const FLIGHT_FIELDS = Object.keys(flightFields) as (keyof FlightValues)[]
+export const EMPTY_FLIGHTS: FlightValues = {
+  indiaNeedsPickup: false,
+  indiaArrivalDate: "",
+  indiaArrivalTime: "",
+  indiaArrivalFlight: "",
+  indiaDepartureDate: "",
+  indiaDepartureTime: "",
+  indiaDepartureFlight: "",
+}
+
 /** The travel fields of the party, or of one person travelling on their own. */
-export type TripValues = { [K in keyof typeof tripFields]: z.infer<(typeof tripFields)[K]> }
+export type TripValues = {
+  [K in keyof typeof tripFields]: z.infer<(typeof tripFields)[K]>
+}
 export const TRIP_FIELDS = Object.keys(tripFields) as (keyof TripValues)[]
 
 const makeMemberSchema = (t: Translate) =>
@@ -228,11 +279,18 @@ const makeMemberSchema = (t: Translate) =>
     // Aged YOUTH_MAX_AGE or under: "yes", "no" or unanswered (optional).
     // Optional so a draft saved before it existed still loads.
     youthConvention: z.string().optional(),
+    // "Arriving early for seva as a Swayam Sevak", optional. Ticked, this
+    // person's days may be any in January or February 2027 (SEVA_DATES).
+    // Optional so a draft saved before it existed still loads.
+    earlySeva: z.boolean().optional(),
     // How this person travels, only used when the party does not all travel
     // the same way (`hasSplitTravel`). The same names and meanings as the
     // party's travel fields below, so one set of rules checks both; checked in
     // superRefine.
     ...tripFields,
+    // This person's airport flights, only used when the party does not all
+    // land and fly out on the same days (`hasSplitFlights`).
+    ...flightFields,
   })
 
 /**
@@ -249,9 +307,6 @@ export function makeRegistrationFormSchema(lang: Lang = "en") {
       mandal: z.string().refine(isIn(MANDALS), t("Select your mandal")),
       members: z.array(memberSchema),
       sameSchedule: z.boolean(),
-      // "Arriving early for seva as a Swayam Sevak": optional. Ticked, every
-      // date picker offers all of January and February 2027 (SEVA_DATES).
-      earlySeva: z.boolean(),
       // The party's dates. Only asked for while everyone travels together —
       // checked in superRefine, since with split dates they are not on screen.
       arrivalDate: z.string(),
@@ -298,19 +353,11 @@ export function makeRegistrationFormSchema(lang: Lang = "en") {
       stashedMembers: z.array(
         z.custom<z.infer<ReturnType<typeof makeMemberSchema>>>(() => true)
       ),
-      // From abroad (see `isOverseas`): a pickup from Ahmedabad airport,
-      // optional, and the flight out, for the record only — no drop is
-      // arranged. A flight is its day, time and number; the day is needed once
-      // the pickup is ticked or anything about the flight out is given. A date
-      // is "YYYY-MM-DD" and a time "HH:MM". The landing flight is kept but not
-      // sent while hidden or unticked.
-      indiaNeedsPickup: z.boolean(),
-      indiaArrivalDate: z.string(),
-      indiaArrivalTime: z.string(),
-      indiaArrivalFlight: z.string(),
-      indiaDepartureDate: z.string(),
-      indiaDepartureTime: z.string(),
-      indiaDepartureFlight: z.string(),
+      // "Everyone lands and flies out on the same days": unticked, each
+      // person's own flights are asked instead of the party's.
+      sameFlights: z.boolean(),
+      // The party's airport flights (see flightFields).
+      ...flightFields,
     })
     .superRefine((values, ctx) => {
       const issue = (path: (string | number)[], message: string) =>
@@ -479,9 +526,12 @@ export function makeRegistrationFormSchema(lang: Lang = "en") {
           issue(
             ["members", 0, "mobile"],
             values.takenCode
-              ? t("Already registered as {code} — one registration per number", {
-                  code: values.takenCode,
-                })
+              ? t(
+                  "Already registered as {code} — one registration per number",
+                  {
+                    code: values.takenCode,
+                  }
+                )
               : t("Already registered — one registration per number")
           )
           return
@@ -510,9 +560,9 @@ export function makeRegistrationFormSchema(lang: Lang = "en") {
         )
       }
 
-      const arrivalChoices = arrivalDays(values.earlySeva)
-      const departureChoices = departureDays(values.earlySeva)
       if (!hasSplitDates(values)) {
+        const arrivalChoices = arrivalDays(everyoneSevak(values))
+        const departureChoices = departureDays(everyoneSevak(values))
         if (!isIn(arrivalChoices)(values.arrivalDate))
           issue(["arrivalDate"], t("Select the arrival day"))
         if (!isIn(SLOT_VALUES)(values.arrivalSlot))
@@ -553,6 +603,9 @@ export function makeRegistrationFormSchema(lang: Lang = "en") {
             member.departureSlot,
             member.departureMeal
           )
+          // Each person's own days: a Swayam Sevak's run all of Jan–Feb.
+          const arrivalChoices = arrivalDays(!!member.earlySeva)
+          const departureChoices = departureDays(!!member.earlySeva)
           // Both checked, not one then the other, so every gap shows at once.
           const arrivalPicked =
             isIn(arrivalChoices)(member.arrivalDate) &&
@@ -582,47 +635,87 @@ export function makeRegistrationFormSchema(lang: Lang = "en") {
         })
       }
 
-      // The airport pickup and drop are asked on step 1, before the event
-      // dates: there a flight only has to fall within reach of the event. Step 3
-      // then keeps the event dates between landing and flying out, on the date
-      // fields shown there.
+      // The airport flights are asked on step 2, before the event dates:
+      // there a flight only has to fall within reach of the event. Step 3
+      // then keeps each person's dates between their landing and flying out,
+      // on the date fields shown there.
       if (isOverseas(values)) {
-        const landing = values.indiaNeedsPickup ? values.indiaArrivalDate : ""
-        const leaving = values.indiaDepartureDate
         const firstDay = EVENT.days[0]
         const lastDay = EVENT.days[EVENT.days.length - 1]
-        if (values.indiaNeedsPickup && !landing) {
-          issue(["indiaArrivalDate"], t("Pick the day you land"))
-        }
-        if (
-          !leaving &&
-          (values.indiaDepartureTime || values.indiaDepartureFlight.trim())
-        ) {
-          issue(["indiaDepartureDate"], t("Pick the day you fly out"))
-        }
-        if (landing && landing > lastDay) {
-          issue(
-            ["indiaArrivalDate"],
-            t("The event ends on {date} — land on or before then", {
-              date: formatDay(lastDay, lang),
-            })
-          )
-        }
-        if (leaving && leaving < firstDay) {
-          issue(
-            ["indiaDepartureDate"],
-            t("The event starts on {date} — fly out on or after then", {
-              date: formatDay(firstDay, lang),
-            })
-          )
-        } else if (leaving && landing && leaving < landing) {
-          issue(["indiaDepartureDate"], t("Has to be after you land"))
+        const splitFlights = hasSplitFlights(values)
+        // Each set of flights on its own: the party's, or each person's.
+        const flightSets = splitFlights
+          ? values.members.map((m, i) => ({ f: m, path: ["members", i] }))
+          : [{ f: values, path: [] as (string | number)[] }]
+        for (const { f, path } of flightSets) {
+          const landing = f.indiaNeedsPickup ? f.indiaArrivalDate : ""
+          const leaving = f.indiaDepartureDate
+          if (f.indiaNeedsPickup && !landing) {
+            issue([...path, "indiaArrivalDate"], t("Pick the day you land"))
+          }
+          if (
+            !leaving &&
+            (f.indiaDepartureTime || f.indiaDepartureFlight.trim())
+          ) {
+            issue(
+              [...path, "indiaDepartureDate"],
+              t("Pick the day you fly out")
+            )
+          }
+          if (landing && landing > lastDay) {
+            issue(
+              [...path, "indiaArrivalDate"],
+              t("The event ends on {date} — land on or before then", {
+                date: formatDay(lastDay, lang),
+              })
+            )
+          }
+          if (leaving && leaving < firstDay) {
+            issue(
+              [...path, "indiaDepartureDate"],
+              t("The event starts on {date} — fly out on or after then", {
+                date: formatDay(firstDay, lang),
+              })
+            )
+          } else if (leaving && landing && leaving < landing) {
+            issue(
+              [...path, "indiaDepartureDate"],
+              t("Has to be after you land")
+            )
+          }
         }
 
-        const people = hasSplitDates(values)
-          ? values.members.map((m, i) => ({ ...m, path: ["members", i] }))
-          : [{ ...values, path: [] as (string | number)[] }]
-        for (const person of people) {
+        // Each person's dates against their flights. Shared dates are held to
+        // the latest landing and the earliest flight out in the party.
+        const people = values.members.map((m, i) => {
+          const f = splitFlights ? m : values
+          const dates = hasSplitDates(values) ? m : values
+          return {
+            landing: f.indiaNeedsPickup ? f.indiaArrivalDate : "",
+            leaving: f.indiaDepartureDate,
+            arrivalDate: dates.arrivalDate,
+            departureDate: dates.departureDate,
+            path: hasSplitDates(values) ? ["members", i] : [],
+          }
+        })
+        const checked = hasSplitDates(values)
+          ? people
+          : [
+              {
+                ...people[0],
+                landing: people
+                  .map((p) => p.landing)
+                  .filter(Boolean)
+                  .sort()
+                  .at(-1),
+                leaving: people
+                  .map((p) => p.leaving)
+                  .filter(Boolean)
+                  .sort()[0],
+              },
+            ]
+        for (const person of checked) {
+          const { landing, leaving } = person
           if (landing && person.arrivalDate && person.arrivalDate < landing) {
             issue(
               [...person.path, "arrivalDate"],
@@ -765,7 +858,8 @@ export function maxVehicles(values: TravelValues) {
 }
 
 /** "Number of vehicles" is asked only when more than one is possible. */
-export const asksVehicleCount = (values: TravelValues) => maxVehicles(values) > 1
+export const asksVehicleCount = (values: TravelValues) =>
+  maxVehicles(values) > 1
 
 /**
  * How many vehicles — and vehicle-number boxes — a registration has. Always
@@ -830,10 +924,21 @@ export function isContactVerified(
 
 /**
  * Whether the form asks about landing in India: the mandal is abroad. Asked
- * on the first step, right after the mandal is picked.
+ * on the people step, under the people.
  */
 export function isOverseas(values: Pick<RegistrationFormValues, "mandal">) {
   return OVERSEAS_MANDALS.includes(values.mandal)
+}
+
+/**
+ * Whether each person gives their own airport flights: from abroad, more
+ * than one person, and "everyone lands and flies out on the same days"
+ * unticked — some may land days before the others.
+ */
+export function hasSplitFlights(
+  values: Pick<RegistrationFormValues, "members" | "mandal" | "sameFlights">
+) {
+  return isOverseas(values) && values.members.length > 1 && !values.sameFlights
 }
 
 /** A flight as saved: only the parts given. */
@@ -848,11 +953,12 @@ const indiaFlight = (
 })
 
 /**
- * The airport pickup and flight out as saved: only for someone from abroad
- * who ticked the pickup or gave the day they fly out.
+ * The airport pickup and flight out as saved, the party's or one person's:
+ * only for someone from abroad who ticked the pickup or gave the day they fly
+ * out.
  */
 export function indiaTravelOf(
-  values: RegistrationFormValues
+  values: FlightValues & Pick<RegistrationFormValues, "mandal">
 ): IndiaTravel | undefined {
   const { indiaNeedsPickup: needsPickup, indiaDepartureDate: leaving } = values
   if (!isOverseas(values) || (!needsPickup && !leaving)) return undefined
@@ -952,16 +1058,9 @@ export function relatedFields(
   values: RegistrationFormValues
 ): string[] {
   if (PARTY_DATES.includes(changed)) return PARTY_DATES
-  // Which days are allowed depends on it, for the party and for each person.
-  if (changed === "earlySeva") {
-    return [
-      "arrivalDate",
-      "departureDate",
-      ...values.members.flatMap((_, i) => [
-        `members.${i}.arrivalDate`,
-        `members.${i}.departureDate`,
-      ]),
-    ]
+  // Flying out after landing: either date can make or break it.
+  if (["indiaArrivalDate", "indiaNeedsPickup"].includes(changed)) {
+    return ["indiaDepartureDate"]
   }
   // Adding or removing someone, or who comes by vehicle, changes how many
   // vehicles are allowed.
@@ -991,6 +1090,18 @@ export function relatedFields(
     // A number's valid length and first digit depend on its country code.
     case "mobileCountry":
       return [`${person}.mobile`]
+    case "indiaArrivalDate":
+    case "indiaNeedsPickup":
+      return [`${person}.indiaDepartureDate`]
+    // Which days this person may pick, and the party's shared ones, which
+    // leave the event's days only while everyone is a Swayam Sevak.
+    case "earlySeva":
+      return [
+        `${person}.arrivalDate`,
+        `${person}.departureDate`,
+        "arrivalDate",
+        "departureDate",
+      ]
     case "travelMode":
       return ["vehicleCount"]
     // Two people with one name: every name is compared with every other.
@@ -1008,13 +1119,20 @@ export function relatedFields(
  * Whether each person has their own dates. Only possible with more than one
  * person: the "everyone together" box is not shown for one, so a lone member
  * left over after unticking it and removing the others is back on the party's
- * dates.
+ * dates. Always, in a party where anyone is arriving early for seva: a Swayam
+ * Sevak's days differ from the rest, so the box is hidden and each person
+ * gives their own.
  */
 export function hasSplitDates(
   values: Pick<RegistrationFormValues, "members" | "sameSchedule">
 ) {
-  return values.members.length > 1 && !values.sameSchedule
+  return values.members.length > 1 && (!values.sameSchedule || anySevak(values))
 }
+
+/** Whether anyone in the party is arriving early for seva as a Swayam Sevak. */
+export const anySevak = (values: {
+  members: readonly { earlySeva?: boolean }[]
+}) => values.members.some((m) => !!m.earlySeva)
 export type MemberFormValues = RegistrationFormValues["members"][number]
 
 type DatesValues = Pick<
@@ -1081,10 +1199,9 @@ export function needsAccommodation(values: AccommodationValues) {
 
 /** The fields each step owns, so Continue validates only what is on screen. */
 export const STEP_FIELDS = [
-  ["type", "groupName", "mandal", "indiaArrivalDate", "indiaDepartureDate"],
-  ["members"],
+  ["type", "groupName", "mandal"],
+  ["members", "sameFlights", "indiaArrivalDate", "indiaDepartureDate"],
   [
-    "earlySeva",
     "arrivalDate",
     "arrivalSlot",
     "departureDate",
@@ -1143,6 +1260,8 @@ export function emptyMember(): MemberFormValues {
     arrivalMeal: "",
     departureMeal: "",
     needsAccommodation: false,
+    earlySeva: false,
+    ...EMPTY_FLIGHTS,
   }
 }
 
@@ -1152,7 +1271,6 @@ export const DEFAULT_VALUES: RegistrationFormValues = {
   mandal: "",
   members: [emptyMember()],
   sameSchedule: true,
-  earlySeva: false,
   arrivalDate: "",
   arrivalSlot: "",
   departureDate: "",
@@ -1173,13 +1291,8 @@ export const DEFAULT_VALUES: RegistrationFormValues = {
   takenMobile: "",
   takenCode: "",
   stashedMembers: [],
-  indiaNeedsPickup: false,
-  indiaArrivalDate: "",
-  indiaArrivalTime: "",
-  indiaArrivalFlight: "",
-  indiaDepartureDate: "",
-  indiaDepartureTime: "",
-  indiaDepartureFlight: "",
+  sameFlights: true,
+  ...EMPTY_FLIGHTS,
 }
 
 const orUndefined = (value: string) => (value === "" ? undefined : value)
@@ -1202,6 +1315,7 @@ export function toNewRegistration(
   const local = isLocalMandal(values.mandal)
   const split = hasSplitDates(values)
   const splitTravel = hasSplitTravel(values)
+  const splitFlights = hasSplitFlights(values)
   const type: RegistrationType = values.type
 
   const beds = bedsWanted(values)
@@ -1228,7 +1342,11 @@ export function toNewRegistration(
     attendsYouthConvention: asksYouthConvention(member.age)
       ? yesNoAnswer(member.youthConvention)
       : undefined,
+    earlySeva: !!member.earlySeva,
     travel: splitTravel ? tripRecord(member) : undefined,
+    indiaTravel: splitFlights
+      ? indiaTravelOf({ ...member, mandal: values.mandal })
+      : undefined,
     arrival: !split
       ? arrival
       : {
@@ -1288,8 +1406,8 @@ export function toNewRegistration(
         : {}),
     },
     accommodationRequired: beds.some(Boolean),
-    earlySeva: values.earlySeva,
-    indiaTravel: indiaTravelOf(values),
+    // Split: each person's are on them.
+    indiaTravel: splitFlights ? undefined : indiaTravelOf(values),
     notes: orUndefined(values.notes),
     source,
     // How the contact's number is vouched for. Nothing when an edit keeps it.
@@ -1371,8 +1489,13 @@ function contactProof(values: RegistrationFormValues) {
 export function fromRegistration(
   registration: Registration
 ): RegistrationFormValues {
-  const split = hasSplitSchedule(registration)
+  // A party with a Swayam Sevak gives each person's dates even when they match.
+  const split =
+    hasSplitSchedule(registration) ||
+    (registration.members.length > 1 &&
+      registration.members.some((m) => isSevak(registration, m)))
   const splitTravel = registration.travel.mode === "separate"
+  const splitFlights = hasOwnFlights(registration)
   const members = registration.members.map((member) => {
     const phone = member.mobile ? fromE164(member.mobile) : undefined
     return {
@@ -1401,7 +1524,9 @@ export function fromRegistration(
       arrivalMeal: split ? mealAnswer(member.arrival) : "",
       departureMeal: split ? mealAnswer(member.departure) : "",
       needsAccommodation: wantsBed(registration, member),
+      earlySeva: isSevak(registration, member),
       ...(splitTravel && member.travel ? tripValues(member.travel) : {}),
+      ...(splitFlights ? fromIndiaTravel(member.indiaTravel) : {}),
     }
   })
   // "Everyone" stays ticked only when everyone who stays a night has a bed; a
@@ -1419,7 +1544,6 @@ export function fromRegistration(
     mandal: registration.mandal,
     members,
     sameSchedule: !split,
-    earlySeva: registration.earlySeva ?? false,
     arrivalDate: registration.arrival.date,
     arrivalSlot: registration.arrival.slot,
     departureDate: registration.departure.date,
@@ -1434,14 +1558,15 @@ export function fromRegistration(
       ...Array<string>(Math.max(1, count) - numbers.length).fill(""),
     ].slice(0, Math.max(1, count, numbers.length)),
     accommodationRequired: registration.accommodationRequired && everyone,
-    ...fromIndiaTravel(registration.indiaTravel),
+    sameFlights: !splitFlights,
+    ...fromIndiaTravel(splitFlights ? undefined : registration.indiaTravel),
     notes: registration.notes ?? "",
     keptMobile: registration.members[0]?.mobile ?? "",
   }
 }
 
 /** A saved airport pickup and flight out back as form values. */
-function fromIndiaTravel(india?: IndiaTravel) {
+function fromIndiaTravel(india?: IndiaTravel): FlightValues {
   return {
     indiaNeedsPickup: india?.needsPickup ?? false,
     indiaArrivalDate: india?.arrival?.date ?? "",

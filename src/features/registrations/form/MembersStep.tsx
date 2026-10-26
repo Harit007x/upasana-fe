@@ -17,6 +17,7 @@ import { useT } from "@/i18n/context"
 import { DEFAULT_COUNTRY_CODE, formatMobile, toE164 } from "@/lib/phone"
 
 import { GENDERS, RELATIONS } from "../types"
+import { IndiaTravelSection } from "./IndiaTravelSection"
 import { MobileVerification } from "./MobileVerification"
 import { matchGenderToRelation } from "./relation"
 import { useFormOptions } from "./form-options"
@@ -24,6 +25,7 @@ import {
   asksYouthConvention,
   emptyMember,
   fullNameOf,
+  isOverseas,
   relationAgeHints,
   type MemberFormValues,
   type RegistrationFormValues,
@@ -104,6 +106,7 @@ export function MembersStep() {
   const { fields, append, remove } = useFieldArray({ control, name: "members" })
   const type = watch("type")
   const members = watch("members")
+  const mandal = watch("mandal")
 
   const listError = errors.members?.message ?? errors.members?.root?.message
 
@@ -363,6 +366,10 @@ export function MembersStep() {
           {t("Add another person")}
         </Button>
       )}
+
+      {/* From abroad: when each of them lands in and leaves India — here,
+          once everyone coming is listed, since some may land earlier. */}
+      {isOverseas({ mandal }) && <IndiaTravelSection />}
 
       <Dialog
         open={removing !== undefined}
